@@ -1,2 +1,6 @@
-docker/.env.instance2
+docker/.env*
+!docker/.env.example
+.env
+.env.*
+!.env.example
 .DS_Store
