@@ -1,40 +1,39 @@
 # Southpole Repo Context
 
+Southpole is a local-first TikTok research workflow for operators. It collects TikTok research data through Apify, normalizes and aggregates it, produces local reports/workbooks, scores creators, and generates DM drafts for human review.
+
 ## Architecture
-- Docker stack (`docker/docker-compose.instance2.yml`):
-  - `southpole2-postgres` (Postgres 16)
-  - `southpole2-n8n` (n8n)
-- n8n exposed on `127.0.0.1:5679`.
-- Persistent volumes (external):
-  - `n8n_instance2_postgres2_data`
-  - `n8n_instance2_n8n2_data`
+- `docker-compose.yml` runs n8n and the pipeline service.
+- `apps/pipeline` contains the Python service, CLI, operator UI, scoring, comment analysis, file writers, and DM draft generation.
+- `n8n/workflows/southpole_run_pipeline.json` contains the n8n workflow export.
+- `outputs/runs/<timestamp>_<slug>/` contains generated run artifacts.
+- `outputs/operator_state/` contains generated outreach registry/history state.
+- `state/n8n/` contains local n8n runtime state and must not be committed.
 
-## Active workflows
-- Collector: `KoreaSignals_Collector_TikTok` (`id=4QGwto8MFAMH0XCy`)
-  - Webhook: `POST /webhook/koreasignals/collect`
-  - Core flow: parse -> header/write guards -> jobs/split -> Apify -> map -> append -> finalize
-  - Current conventions: `runId` end-to-end, `raw_events` ranges `A1:V1` and `A:V`
-- Aggregator: `KoreaSignals_Aggregator` (`id=XWcJTb1oXxF1NZWt`)
-  - Webhook: `POST /webhook/koreasignals/aggregate`
-  - Reads `raw_events`, writes:
-    - `daily_metrics`
-    - `keyword_totals`
-    - `top_snippets`
-    - `creators`
+## Runtime Flow
+1. Operator starts the stack with `start.command`, `start.bat`, or `scripts/up.sh`.
+2. Operator opens `http://localhost:8080/ui`.
+3. `Run Collect + Aggregate` collects data, normalizes rows, writes report/workbook outputs, and prepares scoring artifacts.
+4. `Generate DM Drafts` reads a run's `creators.csv` and creates reviewable draft messages.
 
-## Service/data dependencies
-- Apify API (`APIFY_TOKEN`, actor id).
-- Google Sheets OAuth credential references on all Sheets nodes.
-- Spreadsheet tabs must already exist (no tab creation in workflows).
+## Key APIs
+- `GET /health`
+- `GET /ui`
+- `GET /runs`
+- `POST /run`
+- `POST /dm/generate`
+- `POST /comments/targets`
+- `POST /comments/collect`
+- `POST /comments/analyze`
+- `POST /scoring/creators`
+- `POST /outreach/sync`
 
-## Operational constraints
-- Exactly one `SplitInBatches` in Collector.
-- Range-based Google Sheets operations only.
-- Out-of-lookback rows are not dropped in Collector mapping; `inLookback` is marked.
-- Deterministic DB overwrite is used when updating active workflow definitions.
+## Required Local Configuration
+- Copy `.env.example` to `.env`.
+- Fill `APIFY_TOKEN`, `N8N_ENCRYPTION_KEY`, and `OPENAI_API_KEY` for live operation.
+- Optional/comment-specific: `APIFY_TIKTOK_COMMENTS_ACTOR_ID`, `OPENAI_ANALYSIS_MODEL`.
 
-## Known issues/history to watch
-- UI imports may not overwrite active workflow rows reliably; verify by workflow id in DB.
-- Missing Sheets credential refs cause runtime write/read failures.
-- Apify runs can remain queued (`READY/RUNNING`) and require polling + timeout handling.
-- Build tags are used to verify executed workflow version.
+## Privacy And Safety Notes
+- The repo is intended to be private.
+- Real `.env`, run outputs, outreach state, and n8n databases are intentionally ignored.
+- TikTok DM sending is not automated; generated messages are drafts for human review.
