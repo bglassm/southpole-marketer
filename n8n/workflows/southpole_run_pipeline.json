@@ -1,0 +1,227 @@
+{
+  "name": "Southpole - Run Pipeline",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual_trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -760,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "keywords",
+              "value": "kbeauty,oliveyoung",
+              "type": "string"
+            },
+            {
+              "id": "a2",
+              "name": "days",
+              "value": 7,
+              "type": "number"
+            },
+            {
+              "id": "a3",
+              "name": "slug",
+              "value": "manual",
+              "type": "string"
+            },
+            {
+              "id": "a4",
+              "name": "source",
+              "value": "n8n-manual",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "manual_inputs",
+      "name": "Manual Inputs",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -520,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://pipeline:8080/run",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"keywords\": $json.keywords,\n  \"days\": $json.days,\n  \"slug\": $json.slug,\n  \"source\": $json.source\n}",
+        "options": {
+          "timeout": 600000
+        }
+      },
+      "id": "manual_http",
+      "name": "Run Pipeline (Manual)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -260,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { message: 'Pipeline completed', summary: $json } }];"
+      },
+      "id": "manual_result",
+      "name": "Manual Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        20,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "path": "southpole/run-pipeline",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook_trigger",
+      "name": "webhook-trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -760,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = $json.body ?? $json;\nconst keywords = payload.keywords ?? 'kbeauty,oliveyoung';\nconst daysRaw = payload.days ?? 7;\nconst slug = payload.slug ?? 'webhook';\nconst source = payload.source ?? 'n8n-webhook';\nconst days = Number.isFinite(Number(daysRaw)) ? Number(daysRaw) : 7;\nreturn [{ json: { keywords, days, slug, source } }];"
+      },
+      "id": "normalize_webhook",
+      "name": "Normalize Webhook Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -520,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://pipeline:8080/run",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"keywords\": $json.keywords,\n  \"days\": $json.days,\n  \"slug\": $json.slug,\n  \"source\": $json.source\n}",
+        "options": {
+          "timeout": 600000
+        }
+      },
+      "id": "webhook_http",
+      "name": "Run Pipeline (Webhook)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -260,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "respond_webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        20,
+        140
+      ]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Manual Inputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Inputs": {
+      "main": [
+        [
+          {
+            "node": "Run Pipeline (Manual)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Pipeline (Manual)": {
+      "main": [
+        [
+          {
+            "node": "Manual Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "webhook-trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Webhook Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Webhook Input": {
+      "main": [
+        [
+          {
+            "node": "Run Pipeline (Webhook)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Pipeline (Webhook)": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "id": "southpoleRunPipeline01"
+}

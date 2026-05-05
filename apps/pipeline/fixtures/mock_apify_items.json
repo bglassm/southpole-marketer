@@ -1,0 +1,90 @@
+[
+  {
+    "id": "739001",
+    "webVideoUrl": "https://www.tiktok.com/@creator_one/video/739001",
+    "text": "Kbeauty winter serum routine",
+    "createTimeISO": "2026-03-11T10:20:00Z",
+    "authorMeta": {
+      "id": "u100",
+      "name": "creator_one",
+      "nickName": "Creator One",
+      "profileUrl": "https://www.tiktok.com/@creator_one"
+    },
+    "playCount": 12000,
+    "diggCount": 870,
+    "commentCount": 45,
+    "shareCount": 72,
+    "collectCount": 30,
+    "hashtags": [
+      { "name": "kbeauty" },
+      { "name": "serum" }
+    ],
+    "region": "KR"
+  },
+  {
+    "id": "739002",
+    "webVideoUrl": "https://www.tiktok.com/@creator_two/video/739002",
+    "text": "Olive Young favorites this week",
+    "createTimeISO": "2026-03-10T08:00:00Z",
+    "authorMeta": {
+      "id": "u101",
+      "name": "creator_two",
+      "nickName": "Creator Two",
+      "profileUrl": "https://www.tiktok.com/@creator_two"
+    },
+    "playCount": 22000,
+    "diggCount": 1300,
+    "commentCount": 84,
+    "shareCount": 110,
+    "collectCount": 70,
+    "hashtags": [
+      { "name": "oliveyoung" },
+      { "name": "haul" }
+    ],
+    "region": "KR"
+  },
+  {
+    "id": "739003",
+    "webVideoUrl": "https://www.tiktok.com/@creator_one/video/739003",
+    "text": "Top lip tints from OliveYoung",
+    "createTimeISO": "2026-03-09T21:15:00Z",
+    "authorMeta": {
+      "id": "u100",
+      "name": "creator_one",
+      "nickName": "Creator One",
+      "profileUrl": "https://www.tiktok.com/@creator_one"
+    },
+    "playCount": 17500,
+    "diggCount": 980,
+    "commentCount": 66,
+    "shareCount": 90,
+    "collectCount": 40,
+    "hashtags": [
+      { "name": "oliveyoung" },
+      { "name": "liptint" }
+    ],
+    "region": "KR"
+  },
+  {
+    "id": "739004",
+    "webVideoUrl": "https://www.tiktok.com/@creator_three/video/739004",
+    "text": "Skin barrier tips for dry season",
+    "createTimeISO": "2026-03-08T05:45:00Z",
+    "authorMeta": {
+      "id": "u102",
+      "name": "creator_three",
+      "nickName": "Creator Three",
+      "profileUrl": "https://www.tiktok.com/@creator_three"
+    },
+    "playCount": 9000,
+    "diggCount": 540,
+    "commentCount": 32,
+    "shareCount": 28,
+    "collectCount": 24,
+    "hashtags": [
+      { "name": "kbeauty" },
+      { "name": "skincare" }
+    ],
+    "region": "KR"
+  }
+]
