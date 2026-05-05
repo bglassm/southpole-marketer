@@ -1,0 +1,619 @@
+[
+  {
+    "name": "KoreaSignals_Aggregator",
+    "active": true,
+    "settings": {},
+    "nodes": [
+      {
+        "parameters": {},
+        "id": "1",
+        "name": "Trigger_Manual",
+        "type": "n8n-nodes-base.manualTrigger",
+        "typeVersion": 1,
+        "position": [
+          220,
+          220
+        ]
+      },
+      {
+        "parameters": {
+          "path": "koreasignals/aggregate",
+          "httpMethod": "POST",
+          "responseMode": "lastNode"
+        },
+        "id": "2",
+        "name": "Trigger_Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          220,
+          420
+        ],
+        "webhookId": "koreasignals-aggregate-v2"
+      },
+      {
+        "parameters": {
+          "jsCode": "const parseDryRun = (v) => v === true || v === 'true' || v === 1 || v === '1';\n\nlet body = $json.body ?? $json;\nif (typeof body === 'string') {\n  try {\n    body = JSON.parse(body);\n  } catch {\n    body = {};\n  }\n}\nif (!body || typeof body !== 'object') body = {};\n\nconst daysInput = body.days;\nconst dryRunRaw = body.dryRun ?? $json.dryRun ?? $json.query?.dryRun;\nconst dryRun = parseDryRun(dryRunRaw);\nconst startedAtISO = new Date().toISOString();\n\nif (daysInput === undefined || daysInput === null || daysInput === '') {\n  return [{ json: { ok: true, days: 30, dryRun, startedAtISO } }];\n}\n\nconst d = Number(daysInput);\nif (!Number.isFinite(d) || Math.trunc(d) < 1) {\n  return [{\n    json: {\n      ok: false,\n      reason: 'INVALID_DAYS',\n      message: 'days must be a positive integer',\n      days: 30,\n      dryRun,\n      startedAtISO\n    }\n  }];\n}\n\nreturn [{ json: { ok: true, days: Math.min(90, Math.trunc(d)), dryRun, startedAtISO } }];"
+        },
+        "id": "3",
+        "name": "Parse_Request",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          460,
+          320
+        ]
+      },
+      {
+        "parameters": {
+          "authentication": "oAuth2",
+          "resource": "sheet",
+          "operation": "read",
+          "sheetId": "={{$env.GSHEET_ID}}",
+          "range": "={{($env.GSHEET_RAW_TAB || 'raw_events') + '!A:U'}}",
+          "rawData": false,
+          "dataProperty": "data"
+        },
+        "id": "4",
+        "name": "Read_Raw_Events",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 2,
+        "alwaysOutputData": true,
+        "position": [
+          700,
+          320
+        ],
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "xFQ7ZGfQSpFnp6LD",
+            "name": "Google Sheets account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "const req = $('Parse_Request').first().json || {};\nconst days = Number(req.days || 30);\nconst dryRun = req.dryRun === true;\nconst startedAtISO = req.startedAtISO || new Date().toISOString();\nconst inputRows = $input.all().map((i) => i.json || {});\nconst rows = inputRows.filter((r) => {\n  if (!r || typeof r !== 'object') return false;\n  return Object.values(r).some((v) => {\n    if (v === null || v === undefined) return false;\n    if (typeof v === 'string') return v.trim() !== '';\n    return true;\n  });\n});\n\nif (!rows.length) {\n  return [{\n    json: {\n      ok: false,\n      reason: 'NO_RAW_DATA',\n      message: 'raw_events is empty',\n      days,\n      dryRun,\n      startedAtISO,\n      summary: {\n        rawRowsRead: 0,\n        windowRows: 0,\n        uniqueVideos: 0,\n        dailyRows: 0,\n        keywordRows: 0,\n        snippetRows: 0,\n        rejectedCount: 0\n      }\n    }\n  }];\n}\n\nconst toNumOrNull = (v) => {\n  if (v === null || v === undefined || v === '') return null;\n  const n = Number(v);\n  return Number.isFinite(n) ? n : null;\n};\n\nconst toDateString = (v) => {\n  if (typeof v === 'string' && /^\\d{4}-\\d{2}-\\d{2}$/.test(v)) return v;\n  return null;\n};\n\nconst toIso = (v) => {\n  if (!v) return null;\n  const d = new Date(v);\n  return Number.isNaN(d.getTime()) ? null : d.toISOString();\n};\n\nconst now = new Date();\nconst todayKST = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });\nconst start = new Date(now.getTime() - (Math.max(1, days) - 1) * 86400000);\nconst startKST = start.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });\n\nconst normalized = rows.map((r) => {\n  const collectedAtISO = toIso(r.collectedAtISO);\n  const createTimeISO = toIso(r.createTimeISO);\n  const createDateKST = toDateString(r.createDateKST);\n\n  return {\n    collectedAtISO,\n    collectedDateKST: toDateString(r.collectedDateKST),\n    createTimeISO,\n    createDateKST,\n    bucket: r.bucket || null,\n    keyword: r.keyword || null,\n    query: r.query || null,\n    proxyCountryCode: r.proxyCountryCode || null,\n    id: r.id || null,\n    text: r.text || null,\n    textLanguage: r.textLanguage || null,\n    videoUrl: r.videoUrl || null,\n    authorName: r.authorName || null,\n    authorNickName: r.authorNickName || null,\n    authorProfileUrl: r.authorProfileUrl || null,\n    authorFollowers: toNumOrNull(r.authorFollowers),\n    playCount: toNumOrNull(r.playCount),\n    diggCount: toNumOrNull(r.diggCount),\n    shareCount: toNumOrNull(r.shareCount),\n    commentCount: toNumOrNull(r.commentCount),\n    inLookback: r.inLookback === true || r.inLookback === 'TRUE' || r.inLookback === 'true'\n  };\n});\n\nconst filtered = normalized.filter((r) => r.id && r.createDateKST && r.createDateKST >= startKST && r.createDateKST <= todayKST);\n\nconst dedupe = new Map();\nfor (const row of filtered) {\n  const prev = dedupe.get(row.id);\n  if (!prev) {\n    dedupe.set(row.id, row);\n    continue;\n  }\n  const prevTs = new Date(prev.collectedAtISO || 0).getTime();\n  const currTs = new Date(row.collectedAtISO || 0).getTime();\n  if (currTs >= prevTs) dedupe.set(row.id, row);\n}\n\nconst dedupedRows = Array.from(dedupe.values());\nconst warning = dedupedRows.length === 0 ? 'NO_ROWS_AFTER_DEDUPE' : null;\n\nreturn [{\n  json: {\n    ok: dedupedRows.length > 0,\n    reason: dedupedRows.length > 0 ? null : 'NO_DEDUPED_ROWS',\n    warning,\n    days,\n    dryRun,\n    startedAtISO,\n    windowStartKST: startKST,\n    windowEndKST: todayKST,\n    totalRawRows: rows.length,\n    filteredRows: filtered.length,\n    dedupedRows,\n    summary: {\n      rawRowsRead: rows.length,\n      windowRows: filtered.length,\n      uniqueVideos: dedupedRows.length,\n      dailyRows: 0,\n      keywordRows: 0,\n      snippetRows: 0,\n      rejectedCount: Math.max(0, rows.length - filtered.length)\n    }\n  }\n}];"
+        },
+        "id": "5",
+        "name": "Filter_And_Dedupe",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          940,
+          320
+        ]
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "const payload = $json || {};\nconst rows = Array.isArray(payload.dedupedRows) ? payload.dedupedRows : [];\nconst getEnvInt = (key, fallback) => { const n = Number.parseInt($env[key] ?? '', 10); return Number.isFinite(n) ? n : fallback; };\nconst topN = Math.max(1, getEnvInt('TOP_SNIPPETS_N', 5));\nconst creatorTopN = Math.max(1, getEnvInt('CREATORS_PREVIEW_TOP_N', 20));\nconst creatorMaxRows = Math.max(1, getEnvInt('CREATORS_MAX_ROWS', 500));\n\nconst numStat = () => ({ sum: 0, count: 0 });\nconst addNum = (stat, val) => {\n  if (val === null || val === undefined || val === '') return;\n  const n = Number(val);\n  if (!Number.isFinite(n)) return;\n  stat.sum += n;\n  stat.count += 1;\n};\nconst statValue = (stat) => (stat.count > 0 ? stat.sum : null);\nconst statAvg = (stat, baseCount) => (baseCount > 0 && stat.count > 0 ? +(stat.sum / baseCount).toFixed(2) : null);\n\nconst byDaily = new Map();\nfor (const r of rows) {\n  const key = `${r.createDateKST}||${r.bucket || ''}||${r.keyword || ''}`;\n  if (!byDaily.has(key)) {\n    byDaily.set(key, {\n      date_kst: r.createDateKST,\n      bucket: r.bucket || null,\n      keyword: r.keyword || null,\n      videos_count: 0,\n      play: numStat(), digg: numStat(), share: numStat(), comment: numStat()\n    });\n  }\n  const cur = byDaily.get(key);\n  cur.videos_count += 1;\n  addNum(cur.play, r.playCount);\n  addNum(cur.digg, r.diggCount);\n  addNum(cur.share, r.shareCount);\n  addNum(cur.comment, r.commentCount);\n}\n\nconst dailyRows = Array.from(byDaily.values())\n  .map((r) => ({\n    date_kst: r.date_kst,\n    bucket: r.bucket,\n    keyword: r.keyword,\n    videos_count: r.videos_count,\n    play_sum: statValue(r.play),\n    digg_sum: statValue(r.digg),\n    share_sum: statValue(r.share),\n    comment_sum: statValue(r.comment),\n    play_avg: statAvg(r.play, r.videos_count),\n    digg_avg: statAvg(r.digg, r.videos_count),\n    share_avg: statAvg(r.share, r.videos_count),\n    comment_avg: statAvg(r.comment, r.videos_count)\n  }))\n  .sort((a, b) => a.date_kst.localeCompare(b.date_kst) || (a.bucket || '').localeCompare(b.bucket || '') || (a.keyword || '').localeCompare(b.keyword || ''));\n\nconst byKeyword = new Map();\nfor (const r of rows) {\n  const key = `${r.bucket || ''}||${r.keyword || ''}`;\n  if (!byKeyword.has(key)) {\n    byKeyword.set(key, {\n      bucket: r.bucket || null,\n      keyword: r.keyword || null,\n      videos_count: 0,\n      play: numStat(), digg: numStat(), share: numStat(), comment: numStat()\n    });\n  }\n  const cur = byKeyword.get(key);\n  cur.videos_count += 1;\n  addNum(cur.play, r.playCount);\n  addNum(cur.digg, r.diggCount);\n  addNum(cur.share, r.shareCount);\n  addNum(cur.comment, r.commentCount);\n}\n\nconst keywordRows = Array.from(byKeyword.values())\n  .map((r) => ({\n    bucket: r.bucket,\n    keyword: r.keyword,\n    videos_count: r.videos_count,\n    play_sum: statValue(r.play),\n    digg_sum: statValue(r.digg),\n    share_sum: statValue(r.share),\n    comment_sum: statValue(r.comment),\n    play_per_video: statAvg(r.play, r.videos_count),\n    digg_per_video: statAvg(r.digg, r.videos_count),\n    share_per_video: statAvg(r.share, r.videos_count),\n    comment_per_video: statAvg(r.comment, r.videos_count)\n  }))\n  .sort((a, b) => (a.bucket || '').localeCompare(b.bucket || '') || (a.keyword || '').localeCompare(b.keyword || ''));\n\nconst byBucketKeyword = new Map();\nfor (const r of rows) {\n  const key = `${r.bucket || ''}||${r.keyword || ''}`;\n  if (!byBucketKeyword.has(key)) byBucketKeyword.set(key, []);\n  byBucketKeyword.get(key).push(r);\n}\n\nconst snippetRows = [];\nfor (const arr of byBucketKeyword.values()) {\n  const sorted = [...arr].sort((a, b) => {\n    const ap = Number.isFinite(Number(a.playCount)) ? Number(a.playCount) : -1;\n    const bp = Number.isFinite(Number(b.playCount)) ? Number(b.playCount) : -1;\n    return bp - ap;\n  }).slice(0, topN);\n\n  for (const r of sorted) {\n    snippetRows.push({\n      bucket: r.bucket,\n      keyword: r.keyword,\n      id: r.id,\n      createDateKST: r.createDateKST,\n      createTimeISO: r.createTimeISO,\n      playCount: r.playCount,\n      diggCount: r.diggCount,\n      shareCount: r.shareCount,\n      commentCount: r.commentCount,\n      text: r.text,\n      videoUrl: r.videoUrl,\n      authorNickName: r.authorNickName,\n      authorFollowers: r.authorFollowers\n    });\n  }\n}\n\nconst rejected_with_reason = [];\nconst creatorsMap = new Map();\n\nconst normalizeHandleFromProfile = (url) => {\n  if (!url || typeof url !== 'string') return null;\n  const m = url.match(/@([A-Za-z0-9._]+)/);\n  if (m?.[1]) return m[1].toLowerCase();\n  const parts = url.split('/').filter(Boolean);\n  if (!parts.length) return null;\n  const last = parts[parts.length - 1];\n  if (!last || last.startsWith('http')) return null;\n  return last.toLowerCase();\n};\n\nfor (const r of rows) {\n  const profile = (r.authorProfileUrl || '').trim() || null;\n  const handle = normalizeHandleFromProfile(profile) || (r.authorNickName ? String(r.authorNickName).trim().toLowerCase() : null);\n  if (!profile && !handle) {\n    rejected_with_reason.push({\n      reason: 'MISSING_AUTHOR_ID',\n      id: r.id || null,\n      keyword: r.keyword || null,\n      bucket: r.bucket || null,\n      authorProfileUrl: r.authorProfileUrl || null,\n      authorNickName: r.authorNickName || null\n    });\n    continue;\n  }\n\n  const creatorKey = profile || `handle:${handle}`;\n  if (!creatorsMap.has(creatorKey)) {\n    creatorsMap.set(creatorKey, {\n      authorHandle: handle,\n      authorName: r.authorName || null,\n      authorNickName: r.authorNickName || null,\n      authorProfileUrl: profile,\n      authorFollowers: (r.authorFollowers === null || r.authorFollowers === undefined || r.authorFollowers === '') ? null : Number(r.authorFollowers),\n      postsCount: 0,\n      play: numStat(),\n      topPlay: null,\n      topPostUrl: null,\n      keywordsSeenSet: new Set()\n    });\n  }\n\n  const cur = creatorsMap.get(creatorKey);\n  cur.postsCount += 1;\n  addNum(cur.play, r.playCount);\n\n  if (r.keyword) cur.keywordsSeenSet.add(String(r.keyword));\n  if (!cur.authorName && r.authorName) cur.authorName = r.authorName;\n  if (!cur.authorNickName && r.authorNickName) cur.authorNickName = r.authorNickName;\n  if (!cur.authorProfileUrl && profile) cur.authorProfileUrl = profile;\n  if (!cur.authorHandle && handle) cur.authorHandle = handle;\n\n  const followersN = (r.authorFollowers === null || r.authorFollowers === undefined || r.authorFollowers === '') ? null : Number(r.authorFollowers);\n  if (Number.isFinite(followersN)) {\n    if (cur.authorFollowers === null || cur.authorFollowers === undefined || cur.authorFollowers === '' || !Number.isFinite(Number(cur.authorFollowers)) || followersN > Number(cur.authorFollowers)) {\n      cur.authorFollowers = followersN;\n    }\n  }\n\n  const playN = Number.isFinite(Number(r.playCount)) ? Number(r.playCount) : null;\n  if (playN !== null && (cur.topPlay === null || playN > cur.topPlay)) {\n    cur.topPlay = playN;\n    cur.topPostUrl = r.videoUrl || null;\n  }\n}\n\nconst creatorsRows = Array.from(creatorsMap.values()).map((c) => {\n  const totalPlays = statValue(c.play);\n  const avgPlays = c.postsCount > 0 && c.play.count > 0 ? +(c.play.sum / c.postsCount).toFixed(2) : null;\n  return {\n    authorHandle: c.authorHandle || null,\n    authorName: c.authorName || null,\n    authorNickName: c.authorNickName || null,\n    authorProfileUrl: c.authorProfileUrl || null,\n    authorFollowers: Number.isFinite(Number(c.authorFollowers)) ? Number(c.authorFollowers) : null,\n    postsCount: c.postsCount,\n    totalPlays,\n    avgPlays,\n    topPostUrl: c.topPostUrl || null,\n    keywordsSeen: Array.from(c.keywordsSeenSet).sort()\n  };\n}).sort((a, b) => {\n  const ap = Number.isFinite(Number(a.totalPlays)) ? Number(a.totalPlays) : -1;\n  const bp = Number.isFinite(Number(b.totalPlays)) ? Number(b.totalPlays) : -1;\n  if (bp !== ap) return bp - ap;\n  const af = Number.isFinite(Number(a.authorFollowers)) ? Number(a.authorFollowers) : -1;\n  const bf = Number.isFinite(Number(b.authorFollowers)) ? Number(b.authorFollowers) : -1;\n  if (bf !== af) return bf - af;\n  return (a.authorHandle || '').localeCompare(b.authorHandle || '');\n});\n\nconst creatorsRowsCapped = creatorsRows.slice(0, creatorMaxRows);\nconst creatorsPreviewTopN = creatorsRowsCapped.slice(0, creatorTopN);\nconst creatorSummary = {\n  creatorsTotal: creatorsRows.length,\n  rejectedCount: rejected_with_reason.length,\n  previewCount: creatorsPreviewTopN.length,\n  groupingKey: 'authorProfileUrl_or_authorHandle'\n};\n\nconst dailyHeader = ['date_kst','bucket','keyword','videos_count','play_sum','digg_sum','share_sum','comment_sum','play_avg','digg_avg','share_avg','comment_avg'];\nconst keywordHeader = ['bucket','keyword','videos_count','play_sum','digg_sum','share_sum','comment_sum','play_per_video','digg_per_video','share_per_video','comment_per_video'];\nconst snippetHeader = ['bucket','keyword','id','createDateKST','createTimeISO','playCount','diggCount','shareCount','commentCount','text','videoUrl','authorNickName','authorFollowers'];\n\nconst summary = {\n  rawRowsRead: Number(payload.totalRawRows || 0),\n  windowRows: Number(payload.filteredRows || 0),\n  uniqueVideos: rows.length,\n  dailyRows: dailyRows.length,\n  keywordRows: keywordRows.length,\n  snippetRows: snippetRows.length,\n  rejectedCount: Math.max(0, Number(payload.totalRawRows || 0) - Number(payload.filteredRows || 0))\n};\n\nreturn [{\n  json: {\n    ok: true,\n    dryRun: payload.dryRun === true,\n    days: payload.days,\n    startedAtISO: payload.startedAtISO || new Date().toISOString(),\n    windowStartKST: payload.windowStartKST,\n    windowEndKST: payload.windowEndKST,\n    totalRawRows: payload.totalRawRows,\n    filteredRows: payload.filteredRows,\n    dedupedRows: rows.length,\n    warning: payload.warning || null,\n    summary,\n    creatorSummary,\n    creatorsRowsFull: creatorsRowsCapped,\n    creatorsPreviewTopN,\n    creatorsRejectedWithReason: rejected_with_reason,\n    sampleDedupedTop1: rows[0] ?? null,\n    top5MappedRows: rows.slice(0, 5),\n    dailyPreviewTop3: dailyRows.slice(0, 3),\n    keywordPreviewTop3: keywordRows.slice(0, 3),\n    snippetsPreviewTop3: snippetRows.slice(0, 3),\n    dailyMatrix: [dailyHeader, ...dailyRows.map((r) => dailyHeader.map((h) => r[h] ?? null))],\n    keywordMatrix: [keywordHeader, ...keywordRows.map((r) => keywordHeader.map((h) => r[h] ?? null))],\n    snippetMatrix: [snippetHeader, ...snippetRows.map((r) => snippetHeader.map((h) => r[h] ?? null))]\n  }\n}];\n"
+        },
+        "id": "6",
+        "name": "Build_Aggregates",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1180,
+          320
+        ]
+      },
+      {
+        "parameters": {
+          "authentication": "oAuth2",
+          "resource": "sheet",
+          "operation": "clear",
+          "sheetId": "={{$env.GSHEET_ID}}",
+          "range": "={{($env.GSHEET_DAILY_TAB || 'daily_metrics') + '!A1:Z'}}"
+        },
+        "id": "7",
+        "name": "Clear_Daily_Metrics",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 2,
+        "position": [
+          1420,
+          320
+        ],
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "xFQ7ZGfQSpFnp6LD",
+            "name": "Google Sheets account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "authentication": "oAuth2",
+          "resource": "sheet",
+          "operation": "update",
+          "sheetId": "={{$env.GSHEET_ID}}",
+          "range": "={{($env.GSHEET_DAILY_TAB || 'daily_metrics') + '!A1:Z'}}",
+          "rawData": true,
+          "dataProperty": "dailyMatrix",
+          "options": {
+            "valueInputMode": "USER_ENTERED"
+          }
+        },
+        "id": "8",
+        "name": "Write_Daily_Metrics",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 2,
+        "position": [
+          1660,
+          320
+        ],
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "xFQ7ZGfQSpFnp6LD",
+            "name": "Google Sheets account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "authentication": "oAuth2",
+          "resource": "sheet",
+          "operation": "clear",
+          "sheetId": "={{$env.GSHEET_ID}}",
+          "range": "={{($env.GSHEET_KEYWORD_TAB || 'keyword_totals') + '!A1:Z'}}"
+        },
+        "id": "9",
+        "name": "Clear_Keyword_Totals",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 2,
+        "position": [
+          1900,
+          320
+        ],
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "xFQ7ZGfQSpFnp6LD",
+            "name": "Google Sheets account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "authentication": "oAuth2",
+          "resource": "sheet",
+          "operation": "update",
+          "sheetId": "={{$env.GSHEET_ID}}",
+          "range": "={{($env.GSHEET_KEYWORD_TAB || 'keyword_totals') + '!A1:Z'}}",
+          "rawData": true,
+          "dataProperty": "keywordMatrix",
+          "options": {
+            "valueInputMode": "USER_ENTERED"
+          }
+        },
+        "id": "10",
+        "name": "Write_Keyword_Totals",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 2,
+        "position": [
+          2140,
+          320
+        ],
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "xFQ7ZGfQSpFnp6LD",
+            "name": "Google Sheets account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "authentication": "oAuth2",
+          "resource": "sheet",
+          "operation": "clear",
+          "sheetId": "={{$env.GSHEET_ID}}",
+          "range": "={{($env.GSHEET_SNIPPETS_TAB || 'top_snippets') + '!A1:Z'}}"
+        },
+        "id": "11",
+        "name": "Clear_Top_Snippets",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 2,
+        "position": [
+          2380,
+          320
+        ],
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "xFQ7ZGfQSpFnp6LD",
+            "name": "Google Sheets account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "authentication": "oAuth2",
+          "resource": "sheet",
+          "operation": "update",
+          "sheetId": "={{$env.GSHEET_ID}}",
+          "range": "={{($env.GSHEET_SNIPPETS_TAB || 'top_snippets') + '!A1:Z'}}",
+          "rawData": true,
+          "dataProperty": "snippetMatrix",
+          "options": {
+            "valueInputMode": "USER_ENTERED"
+          }
+        },
+        "id": "12",
+        "name": "Write_Top_Snippets",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 2,
+        "position": [
+          2620,
+          320
+        ],
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "xFQ7ZGfQSpFnp6LD",
+            "name": "Google Sheets account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "const BUILD_TAG = 'aggregator-sp2-2026-02-26-dryrun-fixed';\nconst fallback = $json || {};\n\nconst serializeError = (e) => {\n  if (!e) return null;\n  if (typeof e === 'string') return { name: 'Error', message: e };\n  return {\n    name: e.name ? String(e.name) : 'Error',\n    message: e.message ? String(e.message) : String(e),\n    stack: e.stack ? String(e.stack) : undefined\n  };\n};\n\nconst isEmptyObject = (v) => !v || typeof v !== 'object' || Object.keys(v).length === 0;\n\ntry {\n  let source = fallback;\n  if (isEmptyObject(source) || (source.ok === undefined && source.summary === undefined && source.reason === undefined)) {\n    try {\n      const built = $('Build_Aggregates').first().json;\n      if (built && typeof built === 'object') source = built;\n    } catch {\n      // Keep fallback source\n    }\n  }\n\n  const startedAtISO = source.startedAtISO || new Date().toISOString();\n  const finishedAtISO = new Date().toISOString();\n  const durationMs = Math.max(0, new Date(finishedAtISO).getTime() - new Date(startedAtISO).getTime());\n\n  const defaultWouldWriteRanges = {\n    clearDaily: `${$env.GSHEET_DAILY_TAB || 'daily_metrics'}!A1:Z`,\n    writeDaily: `${$env.GSHEET_DAILY_TAB || 'daily_metrics'}!A1:Z`,\n    clearKeyword: `${$env.GSHEET_KEYWORD_TAB || 'keyword_totals'}!A1:Z`,\n    writeKeyword: `${$env.GSHEET_KEYWORD_TAB || 'keyword_totals'}!A1:Z`,\n    clearSnippets: `${$env.GSHEET_SNIPPETS_TAB || 'top_snippets'}!A1:Z`,\n    writeSnippets: `${$env.GSHEET_SNIPPETS_TAB || 'top_snippets'}!A1:Z`,\n    clearCreators: `${$env.GSHEET_CREATORS_TAB || 'creators'}!A1:Z`,\n    writeCreators: `${$env.GSHEET_CREATORS_TAB || 'creators'}!A1:Z`\n  };\n\n  if (source.ok === false) {\n    return [{\n      json: {\n        buildTag: BUILD_TAG,\n        ok: false,\n        dryRun: source.dryRun === true,\n        reason: source.reason || 'AGGREGATION_ABORTED',\n        message: source.message ? String(source.message) : null,\n        warning: source.warning || null,\n        startedAt: startedAtISO,\n        finishedAt: finishedAtISO,\n        durationMs,\n        wouldWriteRanges: source.wouldWriteRanges || defaultWouldWriteRanges,\n        summary: source.summary || {\n          rawRowsRead: 0,\n          windowRows: 0,\n          uniqueVideos: 0,\n          dailyRows: 0,\n          keywordRows: 0,\n          snippetRows: 0,\n          rejectedCount: 0\n        },\n        creatorsRowsWritten: Number(source.creatorsRowsWritten || 0),\n        creatorSummary: source.creatorSummary || {\n          creatorsTotal: 0,\n          rejectedCount: 0,\n          previewCount: 0,\n          groupingKey: 'authorProfileUrl_or_authorHandle'\n        },\n        creatorsPreviewTopN: source.creatorsPreviewTopN || [],\n        creatorsRejectedWithReason: source.creatorsRejectedWithReason || [],\n        dailyPreviewTop3: [],\n        keywordPreviewTop3: [],\n        snippetsPreviewTop3: []\n      }\n    }];\n  }\n\n  return [{\n    json: {\n      buildTag: BUILD_TAG,\n      ok: true,\n      dryRun: source.dryRun === true,\n      workflow: 'KoreaSignals_Aggregator',\n      days: source.days,\n      windowStartKST: source.windowStartKST,\n      windowEndKST: source.windowEndKST,\n      startedAt: startedAtISO,\n      finishedAt: finishedAtISO,\n      durationMs,\n      warning: source.warning || null,\n      wouldWriteRanges: source.wouldWriteRanges || defaultWouldWriteRanges,\n      summary: source.summary || {\n        rawRowsRead: Number(source.totalRawRows || 0),\n        windowRows: Number(source.filteredRows || 0),\n        uniqueVideos: Number(source.dedupedRows || 0),\n        dailyRows: 0,\n        keywordRows: 0,\n        snippetRows: 0,\n        rejectedCount: Math.max(0, Number(source.totalRawRows || 0) - Number(source.filteredRows || 0))\n      },\n      creatorsRowsWritten: Number(source.creatorsRowsWritten || 0),\n      creatorSummary: source.creatorSummary || {\n        creatorsTotal: 0,\n        rejectedCount: 0,\n        previewCount: 0,\n        groupingKey: 'authorProfileUrl_or_authorHandle'\n      },\n      creatorsPreviewTopN: source.creatorsPreviewTopN || [],\n      creatorsRejectedWithReason: source.creatorsRejectedWithReason || [],\n      sampleDedupedTop1: source.sampleDedupedTop1 || null,\n      top5MappedRows: source.top5MappedRows || [],\n      dailyPreviewTop3: source.dailyPreviewTop3 || [],\n      keywordPreviewTop3: source.keywordPreviewTop3 || [],\n      snippetsPreviewTop3: source.snippetsPreviewTop3 || []\n    }\n  }];\n} catch (e) {\n  const err = serializeError(e);\n  return [{\n    json: {\n      buildTag: BUILD_TAG,\n      ok: false,\n      reason: 'FINALIZE_RESPONSE_ERROR',\n      message: err?.message || 'Finalize response failed',\n      error: err,\n      dryRun: fallback.dryRun === true\n    }\n  }];\n}\n"
+        },
+        "id": "13",
+        "name": "Finalize_Response",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2860,
+          320
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "number": [
+              {
+                "value1": "={{$json.ok === true ? 1 : 0}}",
+                "operation": "equal",
+                "value2": 1
+              }
+            ]
+          }
+        },
+        "id": "14",
+        "name": "Request_Valid",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          580,
+          320
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "number": [
+              {
+                "value1": "={{Array.isArray($json.dedupedRows) ? $json.dedupedRows.length : 0}}",
+                "operation": "larger",
+                "value2": 0
+              }
+            ]
+          }
+        },
+        "id": "15",
+        "name": "Has_Window_Data",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          1060,
+          520
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "boolean": [
+              {
+                "value1": "={{$json.dryRun !== true}}",
+                "operation": "isTrue"
+              }
+            ]
+          }
+        },
+        "id": "32",
+        "name": "Not_DryRun_Write",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          1400,
+          500
+        ]
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "const source = $json || {};\nconst nowIso = new Date().toISOString();\nconst rows = Array.isArray(source.creatorsRowsFull) ? source.creatorsRowsFull : [];\nconst header = [\n  'generatedAtISO',\n  'authorHandle',\n  'authorName',\n  'authorNickName',\n  'authorProfileUrl',\n  'authorFollowers',\n  'postsCount',\n  'totalPlays',\n  'avgPlays',\n  'topPostUrl',\n  'keywordsSeen'\n];\nconst creatorsMatrix = [\n  header,\n  ...rows.map((r) => [\n    nowIso,\n    r.authorHandle ?? null,\n    r.authorName ?? null,\n    r.authorNickName ?? null,\n    r.authorProfileUrl ?? null,\n    r.authorFollowers ?? null,\n    r.postsCount ?? null,\n    r.totalPlays ?? null,\n    r.avgPlays ?? null,\n    r.topPostUrl ?? null,\n    Array.isArray(r.keywordsSeen) ? r.keywordsSeen.join(', ') : (r.keywordsSeen ?? null)\n  ])\n];\n\nreturn [{\n  json: {\n    ...source,\n    creatorsRowsWritten: rows.length,\n    creatorsMatrix\n  }\n}];\n"
+        },
+        "id": "33",
+        "name": "Build_Creators_Table",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2200,
+          560
+        ]
+      },
+      {
+        "parameters": {
+          "authentication": "oAuth2",
+          "resource": "sheet",
+          "operation": "clear",
+          "sheetId": "={{$env.GSHEET_ID}}",
+          "range": "={{($env.GSHEET_CREATORS_TAB || 'creators') + '!A1:Z'}}"
+        },
+        "id": "34",
+        "name": "Clear_Creators",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 2,
+        "position": [
+          2440,
+          560
+        ],
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "xFQ7ZGfQSpFnp6LD",
+            "name": "Google Sheets account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "authentication": "oAuth2",
+          "resource": "sheet",
+          "operation": "update",
+          "sheetId": "={{$env.GSHEET_ID}}",
+          "range": "={{($env.GSHEET_CREATORS_TAB || 'creators') + '!A1:Z'}}",
+          "rawData": true,
+          "dataProperty": "creatorsMatrix",
+          "options": {
+            "valueInputMode": "RAW"
+          }
+        },
+        "id": "35",
+        "name": "Write_Creators",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 2,
+        "position": [
+          2680,
+          560
+        ],
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "xFQ7ZGfQSpFnp6LD",
+            "name": "Google Sheets account"
+          }
+        }
+      }
+    ],
+    "connections": {
+      "Trigger_Manual": {
+        "main": [
+          [
+            {
+              "node": "Parse_Request",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Trigger_Webhook": {
+        "main": [
+          [
+            {
+              "node": "Parse_Request",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse_Request": {
+        "main": [
+          [
+            {
+              "node": "Request_Valid",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Read_Raw_Events": {
+        "main": [
+          [
+            {
+              "node": "Filter_And_Dedupe",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Filter_And_Dedupe": {
+        "main": [
+          [
+            {
+              "node": "Has_Window_Data",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build_Aggregates": {
+        "main": [
+          [
+            {
+              "node": "Not_DryRun_Write",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Clear_Daily_Metrics": {
+        "main": [
+          [
+            {
+              "node": "Write_Daily_Metrics",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Write_Daily_Metrics": {
+        "main": [
+          [
+            {
+              "node": "Clear_Keyword_Totals",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Clear_Keyword_Totals": {
+        "main": [
+          [
+            {
+              "node": "Write_Keyword_Totals",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Write_Keyword_Totals": {
+        "main": [
+          [
+            {
+              "node": "Clear_Top_Snippets",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Clear_Top_Snippets": {
+        "main": [
+          [
+            {
+              "node": "Write_Top_Snippets",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Write_Top_Snippets": {
+        "main": [
+          [
+            {
+              "node": "Build_Creators_Table",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Request_Valid": {
+        "main": [
+          [
+            {
+              "node": "Read_Raw_Events",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Finalize_Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Has_Window_Data": {
+        "main": [
+          [
+            {
+              "node": "Build_Aggregates",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Finalize_Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Not_DryRun_Write": {
+        "main": [
+          [
+            {
+              "node": "Clear_Daily_Metrics",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Finalize_Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build_Creators_Table": {
+        "main": [
+          [
+            {
+              "node": "Clear_Creators",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Clear_Creators": {
+        "main": [
+          [
+            {
+              "node": "Write_Creators",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Write_Creators": {
+        "main": [
+          [
+            {
+              "node": "Finalize_Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "id": "XWcJTb1oXxF1NZWt"
+  }
+]

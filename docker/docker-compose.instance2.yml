@@ -1,0 +1,59 @@
+name: southpole_instance2
+
+services:
+  postgres2:
+    image: postgres:16-alpine
+    container_name: southpole2-postgres
+    restart: unless-stopped
+    env_file:
+      - .env.instance2
+    environment:
+      POSTGRES_DB: ${POSTGRES2_DB:-n8n2}
+      POSTGRES_USER: ${POSTGRES2_USER:-n8n2}
+      POSTGRES_PASSWORD: ${POSTGRES2_PASSWORD:-n8n2}
+      TZ: ${TZ:-Asia/Seoul}
+    volumes:
+      - postgres2_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES2_USER:-n8n2} -d ${POSTGRES2_DB:-n8n2}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  n8n2:
+    image: n8nio/n8n:latest
+    container_name: southpole2-n8n
+    restart: unless-stopped
+    depends_on:
+      postgres2:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:5679:5678"
+    env_file:
+      - .env.instance2
+    environment:
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres2
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: ${POSTGRES2_DB:-n8n2}
+      DB_POSTGRESDB_USER: ${POSTGRES2_USER:-n8n2}
+      DB_POSTGRESDB_PASSWORD: ${POSTGRES2_PASSWORD:-n8n2}
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_PROTOCOL: http
+      N8N_HOST: localhost
+      N8N_PORT: 5678
+      N8N_EDITOR_BASE_URL: http://localhost:5679/
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      WEBHOOK_URL: http://localhost:5679/
+      TZ: ${TZ:-Asia/Seoul}
+      GENERIC_TIMEZONE: ${GENERIC_TIMEZONE:-Asia/Seoul}
+    volumes:
+      - n8n2_data:/home/node/.n8n
+
+volumes:
+  postgres2_data:
+    external: true
+    name: n8n_instance2_postgres2_data
+  n8n2_data:
+    external: true
+    name: n8n_instance2_n8n2_data

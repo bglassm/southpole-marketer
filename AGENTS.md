@@ -21,6 +21,7 @@
 - Docker stack: `docker-compose.yml`
 - n8n workflow export: `n8n/workflows/southpole_run_pipeline.json`
 - Python package: `apps/pipeline/src/southpole_pipeline/`
+- Legacy previous-snapshot files may exist under `docker/` and `workflows/`; prefer `docker-compose.yml` and `n8n/workflows/southpole_run_pipeline.json` for the current stack.
 
 ## Useful Commands
 - Start stack: `bash scripts/up.sh`

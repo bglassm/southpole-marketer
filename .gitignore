@@ -4,8 +4,13 @@ __pycache__/
 *.pyd
 .DS_Store
 .env
+.env.*
+!.env.example
 .venv/
 .pytest_cache/
+
+docker/.env*
+!docker/.env.example
 
 outputs/runs/*
 !outputs/runs/.gitkeep

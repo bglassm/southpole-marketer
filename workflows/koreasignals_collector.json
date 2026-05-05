@@ -1,0 +1,551 @@
+[
+  {
+    "name": "KoreaSignals_Collector_TikTok",
+    "active": true,
+    "settings": {},
+    "nodes": [
+      {
+        "parameters": {},
+        "id": "1",
+        "name": "Trigger_Manual",
+        "type": "n8n-nodes-base.manualTrigger",
+        "typeVersion": 1,
+        "position": [
+          220,
+          220
+        ]
+      },
+      {
+        "parameters": {
+          "path": "koreasignals/collect",
+          "httpMethod": "POST",
+          "responseMode": "lastNode"
+        },
+        "id": "2",
+        "name": "Trigger_Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          220,
+          420
+        ],
+        "webhookId": "koreasignals-collect-v2"
+      },
+      {
+        "parameters": {
+          "jsCode": "const parseDryRun = (v) => v === true || v === 'true' || v === 1 || v === '1';\n\nlet body = $json.body ?? $json;\nif (typeof body === 'string') {\n  try {\n    body = JSON.parse(body);\n  } catch {\n    body = {};\n  }\n}\nif (!body || typeof body !== 'object') body = {};\n\nconst keywordsInput = body.keywords;\nconst daysInput = body.days;\nconst dryRunRaw = body.dryRun ?? $json.dryRun ?? $json.query?.dryRun;\nconst dryRun = parseDryRun(dryRunRaw);\n\nconst makeRunId = () => {\n  const runIdRaw = body.runId ?? $json.runId ?? $json.query?.runId;\n  const provided = typeof runIdRaw === 'string' ? runIdRaw.trim() : '';\n  if (provided) return provided.slice(0, 64);\n\n  try {\n    if (globalThis?.crypto?.randomUUID) {\n      return globalThis.crypto.randomUUID();\n    }\n  } catch {\n    // fallback below\n  }\n\n  try {\n    const { randomUUID } = require('crypto');\n    return randomUUID();\n  } catch {\n    return `run-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;\n  }\n};\n\nconst runId = makeRunId();\nconst fallbackKeywords = ['Gen Z travel', '혼자여행'];\nconst keywords = (Array.isArray(keywordsInput) ? keywordsInput : fallbackKeywords)\n  .map((k) => (typeof k === 'string' ? k.trim() : ''))\n  .filter((k) => k.length > 0)\n  .slice(0, 30);\n\nif (!keywords.length) {\n  return [{\n    json: {\n      ok: false,\n      reason: 'INVALID_KEYWORDS',\n      message: 'keywords must be a non-empty array of strings',\n      keywords: [],\n      days: Number.isFinite(Number(daysInput)) ? Math.max(1, Math.trunc(Number(daysInput))) : 30,\n      dryRun,\n      runId,\n      startedAtISO: new Date().toISOString()\n    }\n  }];\n}\n\nconst daysNumber = Number(daysInput);\nif (!Number.isFinite(daysNumber) || Math.trunc(daysNumber) < 1) {\n  return [{\n    json: {\n      ok: false,\n      reason: 'INVALID_DAYS',\n      message: 'days must be a positive integer',\n      keywords,\n      days: 30,\n      dryRun,\n      runId,\n      startedAtISO: new Date().toISOString()\n    }\n  }];\n}\n\nconst days = Math.min(90, Math.trunc(daysNumber));\n\nreturn [{\n  json: {\n    ok: true,\n    keywords,\n    days,\n    dryRun,\n    runId,\n    startedAtISO: new Date().toISOString()\n  }\n}];"
+        },
+        "id": "3",
+        "name": "Parse_Request",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          460,
+          320
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const req = $('Parse_Request').first().json || {};\nreturn [{\n  json: {\n    dryRun: req.dryRun === true,\n    headerMatrix: [[\n      'collectedAtISO','collectedDateKST','createTimeISO','createDateKST','bucket','keyword','query','proxyCountryCode','id','text','textLanguage','videoUrl','authorName','authorNickName','authorProfileUrl','authorFollowers','playCount','diggCount','shareCount','commentCount','inLookback','runId'\n    ]]\n  }\n}];"
+        },
+        "id": "4",
+        "name": "Build_Raw_Header",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          700,
+          180
+        ]
+      },
+      {
+        "parameters": {
+          "authentication": "oAuth2",
+          "resource": "sheet",
+          "operation": "update",
+          "sheetId": "={{$env.GSHEET_ID}}",
+          "range": "={{($env.GSHEET_RAW_TAB || 'raw_events') + '!A1:V1'}}",
+          "rawData": true,
+          "dataProperty": "headerMatrix",
+          "options": {
+            "valueInputMode": "RAW"
+          }
+        },
+        "id": "5",
+        "name": "Ensure_RawEvents_Header",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 2,
+        "position": [
+          940,
+          180
+        ],
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "xFQ7ZGfQSpFnp6LD",
+            "name": "Google Sheets account"
+          }
+        },
+        "continueOnFail": false
+      },
+      {
+        "parameters": {
+          "jsCode": "const req = $('Parse_Request').first().json || {};\n\nconst getEnvString = (key, fallback = '') => {\n  const val = $env[key];\n  if (val === undefined || val === null || val === '') return fallback;\n  return String(val).trim();\n};\n\nconst getEnvInt = (key, fallback) => {\n  const raw = $env[key];\n  const num = Number.parseInt(raw ?? '', 10);\n  return Number.isFinite(num) ? num : fallback;\n};\n\nif (req.ok === false) {\n  return [{\n    json: {\n      skipWorkflow: true,\n      dryRun: Boolean(req.dryRun),\n      runId: req.runId || null,\n      startedAtISO: req.startedAtISO || new Date().toISOString(),\n      fatalErrorCode: req.reason || 'INVALID_REQUEST',\n      fatalErrorMessage: req.message || 'Invalid request payload',\n      jobsTotal: 0,\n      jobsSucceeded: 0,\n      jobsFailed: 1,\n      sheetsRangesWouldWrite: {\n        ensureHeader: `${getEnvString('GSHEET_RAW_TAB', 'raw_events')}!A1:V1`,\n        appendRows: `${getEnvString('GSHEET_RAW_TAB', 'raw_events')}!A:V`\n      }\n    }\n  }];\n}\n\nconst { keywords, days, startedAtISO, dryRun, runId } = req;\nconst actorRaw = getEnvString('APIFY_ACTOR');\nconst token = getEnvString('APIFY_TOKEN');\n\nconst jobsCount = keywords.length;\nconst maxItemsPerRun = Math.max(1, getEnvInt('MAX_ITEMS_PER_RUN', 2000));\nconst requestedPerJob = Math.max(1, getEnvInt('APIFY_RESULTS_PER_PAGE', 20));\nconst perJobCap = Math.max(1, Math.floor(maxItemsPerRun / Math.max(1, jobsCount)));\nconst resultsLimit = Math.max(1, Math.min(200, requestedPerJob, perJobCap));\n\nconst actorNormalized = (actorRaw || 'clockworks/tiktok-scraper').replace(/\\//g, '~');\nconst waitForFinish = Math.max(1, getEnvInt('APIFY_WAIT_FOR_FINISH_SECS', 180));\nconst gsheetRawTab = getEnvString('GSHEET_RAW_TAB', 'raw_events');\nconst defaultBucket = getEnvString('COLLECT_BUCKET', 'GLOBAL');\nconst defaultProxyCountryCode = getEnvString('APIFY_PROXY_COUNTRY_CODE', 'KR');\n\nconst missing = [];\nif (!actorRaw) missing.push('APIFY_ACTOR');\nif (!token) missing.push('APIFY_TOKEN');\n\nif (missing.length > 0) {\n  return [{\n    json: {\n      skipWorkflow: true,\n      dryRun,\n      runId: runId || null,\n      startedAtISO: startedAtISO || new Date().toISOString(),\n      fatalErrorCode: 'MISSING_ENV',\n      fatalErrorMessage: `Missing required environment variable(s): ${missing.join(', ')}. Set them in Southpole docker/.env.instance2 and ensure N8N_BLOCK_ENV_ACCESS_IN_NODE=false.`,\n      missingEnvVars: missing,\n      jobsTotal: jobsCount,\n      jobsSucceeded: 0,\n      jobsFailed: jobsCount,\n      perJobCap,\n      resultsLimit,\n      sheetsRangesWouldWrite: {\n        ensureHeader: `${gsheetRawTab}!A1:V1`,\n        appendRows: `${gsheetRawTab}!A:V`\n      }\n    }\n  }];\n}\n\nconst jobs = keywords.map((keyword) => {\n  const query = String(keyword || '').trim();\n  const runUrlNoToken = `https://api.apify.com/v2/acts/${actorNormalized}/runs?waitForFinish=${waitForFinish}`;\n  const datasetUrlTemplateNoToken = `https://api.apify.com/v2/datasets/{datasetId}/items?clean=true&format=json&limit=${resultsLimit}`;\n\n  return {\n    keyword: query,\n    days,\n    dryRun,\n    runId,\n    startedAtISO: startedAtISO || new Date().toISOString(),\n    jobStartedAtISO: new Date().toISOString(),\n    query,\n    bucket: defaultBucket,\n    proxyCountryCode: defaultProxyCountryCode,\n    actorRaw,\n    actorNormalized,\n    skipWorkflow: false,\n    jobsCount,\n    perJobCap,\n    resultsLimit,\n    waitForFinish,\n    apifyRunUrl: runUrlNoToken,\n    apifyRunUrlNoToken: runUrlNoToken,\n    apifyDatasetItemsUrlTemplate: datasetUrlTemplateNoToken,\n    sheetsRangesWouldWrite: {\n      ensureHeader: `${gsheetRawTab}!A1:V1`,\n      appendRows: `${gsheetRawTab}!A:V`\n    }\n  };\n});\n\nreturn jobs.map((j) => ({ json: j }));"
+        },
+        "id": "6",
+        "name": "Build_Jobs",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1180,
+          320
+        ]
+      },
+      {
+        "parameters": {
+          "batchSize": 1
+        },
+        "id": "7",
+        "name": "Split_Jobs",
+        "type": "n8n-nodes-base.splitInBatches",
+        "typeVersion": 3,
+        "position": [
+          1400,
+          320
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const job = $('Split_Jobs').item.json || {};\n\nconst errorOut = (stage, code, httpStatus, message, retriable, meta = {}) => {\n  return [{\n    json: {\n      ...job,\n      ok: false,\n      stage,\n      error: { code, httpStatus, message, retriable },\n      rawItems: [],\n      datasetId: null,\n      defaultDatasetId: null,\n      apifyRunId: meta.runId ?? null,\n      apifyRunStatus: meta.status ?? null,\n      apifyActorId: meta.actorId ?? (job.actorNormalized || null),\n      waitedSeconds: meta.waitedSeconds ?? 0,\n      fetchedCount: 0,\n      fetchedAtISO: new Date().toISOString()\n    }\n  }];\n};\n\nconst token = String($env.APIFY_TOKEN || '').trim();\nconst actorId = String(job.actorNormalized || '').trim();\nif (!token) return errorOut('Run_Apify_TikTok', 'MISSING_APIFY_TOKEN', 400, 'APIFY_TOKEN is not configured', false);\nif (!actorId) return errorOut('Run_Apify_TikTok', 'MISSING_APIFY_ACTOR', 400, 'APIFY_ACTOR is not configured', false);\n\nconst waitForFinish = Number.parseInt($env.APIFY_WAIT_FOR_FINISH_SECS || String(job.waitForFinish || 180), 10) || 180;\nconst timeoutSecs = Math.max(waitForFinish, Number.parseInt($env.APIFY_TIMEOUT_SECS || '', 10) || 300);\nconst runUrl = `https://api.apify.com/v2/acts/${actorId}/runs?waitForFinish=${waitForFinish}&token=${token}`;\nconst runUrlNoToken = `https://api.apify.com/v2/acts/${actorId}/runs?waitForFinish=${waitForFinish}`;\nconst runInfoBase = 'https://api.apify.com/v2/actor-runs';\n\nconst runInput = {\n  searchQueries: [String(job.keyword || job.query || '').trim()],\n  proxyCountryCode: job.proxyCountryCode,\n  resultsPerPage: Number(job.resultsLimit || 20),\n  searchSection: '/video'\n};\n\nconst retriableByStatus = (status) => [408, 409, 425, 429, 500, 502, 503, 504].includes(status);\nconst terminalFailStatuses = new Set(['FAILED', 'ABORTED', 'TIMED-OUT', 'TIMED_OUT']);\nconst successStatus = 'SUCCEEDED';\n\nconst request = async (options) => {\n  return await this.helpers.httpRequest({\n    ...options,\n    json: true,\n    returnFullResponse: true,\n    ignoreHttpStatusErrors: true,\n  });\n};\n\nconst startedMs = Date.now();\nconst elapsedSecs = () => Math.max(0, Math.floor((Date.now() - startedMs) / 1000));\n\nlet runRes;\ntry {\n  runRes = await request({\n    method: 'POST',\n    url: runUrl,\n    body: runInput,\n    headers: { 'Content-Type': 'application/json' },\n  });\n} catch (err) {\n  return errorOut('Run_Apify_TikTok', 'APIFY_RUN_NETWORK_ERROR', null, String(err.message || err), true, { actorId, waitedSeconds: elapsedSecs() });\n}\n\nconst runStatusCode = Number(runRes?.statusCode || 0);\nconst runBody = runRes?.body || null;\nif (runStatusCode < 200 || runStatusCode >= 300) {\n  const msg = runBody?.error?.message || runBody?.message || `Apify run call failed (${runStatusCode || 'no status'})`;\n  return errorOut('Run_Apify_TikTok', 'APIFY_RUN_FAILED', runStatusCode || null, msg, retriableByStatus(runStatusCode), { actorId, waitedSeconds: elapsedSecs() });\n}\n\nconst runData = runBody?.data || {};\nlet datasetId = runData.defaultDatasetId || runData.datasetId || runBody?.defaultDatasetId || runBody?.datasetId || null;\nconst runId = runData.id || runBody?.id || null;\nlet runStatusText = String(runData.status || runBody?.status || '').toUpperCase() || null;\n\nif (!runId) {\n  return errorOut('Run_Apify_TikTok', 'MISSING_RUN_ID', 502, 'Apify run succeeded but runId was not returned', true, {\n    actorId,\n    status: runStatusText,\n    waitedSeconds: elapsedSecs()\n  });\n}\n\nlet backoffA = 3;\nlet backoffB = 5;\n\nconst pollRun = async () => {\n  const runInfoUrl = `${runInfoBase}/${runId}?token=${token}`;\n  try {\n    const infoRes = await request({ method: 'GET', url: runInfoUrl });\n    const infoCode = Number(infoRes?.statusCode || 0);\n    const infoBody = infoRes?.body || null;\n\n    if (infoCode < 200 || infoCode >= 300) {\n      const msg = infoBody?.error?.message || infoBody?.message || `Apify run status poll failed (${infoCode || 'no status'})`;\n      return { ok: false, code: infoCode || null, message: msg, retriable: retriableByStatus(infoCode) };\n    }\n\n    const infoData = infoBody?.data || {};\n    const status = String(infoData.status || infoBody?.status || '').toUpperCase() || null;\n    const dsId = infoData.defaultDatasetId || infoData.datasetId || infoBody?.defaultDatasetId || infoBody?.datasetId || null;\n    return { ok: true, status, datasetId: dsId };\n  } catch (err) {\n    return { ok: false, code: null, message: String(err.message || err), retriable: true };\n  }\n};\n\nwhile (runStatusText !== successStatus) {\n  const waitedSeconds = elapsedSecs();\n  if (waitedSeconds >= timeoutSecs) {\n    return errorOut(\n      'Poll_Apify_Run_Status',\n      'APIFY_RUN_TIMEOUT',\n      408,\n      `Apify run did not finish within timeout (status=${runStatusText || 'UNKNOWN'}, timeoutSecs=${timeoutSecs})`,\n      true,\n      { actorId, runId, status: runStatusText, waitedSeconds }\n    );\n  }\n\n  if (runStatusText && terminalFailStatuses.has(runStatusText)) {\n    return errorOut(\n      'Poll_Apify_Run_Status',\n      'APIFY_RUN_TERMINAL_FAILURE',\n      409,\n      `Apify run finished with terminal failure status=${runStatusText}`,\n      false,\n      { actorId, runId, status: runStatusText, waitedSeconds }\n    );\n  }\n\n  const poll = await pollRun();\n  if (!poll.ok) {\n    return errorOut(\n      'Poll_Apify_Run_Status',\n      'APIFY_RUN_STATUS_POLL_FAILED',\n      poll.code,\n      poll.message,\n      poll.retriable,\n      { actorId, runId, status: runStatusText, waitedSeconds }\n    );\n  }\n\n  runStatusText = poll.status || runStatusText;\n  if (poll.datasetId) datasetId = poll.datasetId;\n\n  if (runStatusText === successStatus) break;\n  if (runStatusText && terminalFailStatuses.has(runStatusText)) {\n    return errorOut(\n      'Poll_Apify_Run_Status',\n      'APIFY_RUN_TERMINAL_FAILURE',\n      409,\n      `Apify run finished with terminal failure status=${runStatusText}`,\n      false,\n      { actorId, runId, status: runStatusText, waitedSeconds: elapsedSecs() }\n    );\n  }\n\n  const delaySecs = Math.min(20, backoffA);\n  await new Promise((resolve) => setTimeout(resolve, delaySecs * 1000));\n  const next = backoffA + backoffB;\n  backoffA = backoffB;\n  backoffB = next;\n}\n\nconst waitedSeconds = elapsedSecs();\n\nif (!datasetId) {\n  const poll = await pollRun();\n  if (poll.ok && poll.datasetId) datasetId = poll.datasetId;\n}\n\nif (!datasetId) {\n  return errorOut('Run_Apify_TikTok', 'MISSING_DATASET_ID', 502, 'Apify run succeeded but datasetId was not found', true, {\n    actorId,\n    runId,\n    status: runStatusText,\n    waitedSeconds\n  });\n}\n\nconst limit = Number(job.resultsLimit || 20);\nconst datasetItemsUrlNoToken = `https://api.apify.com/v2/datasets/${datasetId}/items?clean=true&format=json&limit=${limit}`;\nconst datasetItemsUrl = `${datasetItemsUrlNoToken}&token=${token}`;\n\nconst maxRetries = 5;\nlet attempt = 0;\nlet itemsCode = 0;\nlet itemsBody = null;\n\nwhile (attempt < maxRetries) {\n  attempt += 1;\n  try {\n    const itemsRes = await request({ method: 'GET', url: datasetItemsUrl });\n    itemsCode = Number(itemsRes?.statusCode || 0);\n    itemsBody = itemsRes?.body ?? null;\n\n    if (itemsCode !== 429) break;\n    if (attempt >= maxRetries) {\n      return errorOut('Fetch_Dataset_Items', 'APIFY_DATASET_RATE_LIMIT', itemsCode || null, 'Dataset items endpoint rate-limited after retries', true, {\n        actorId,\n        runId,\n        status: runStatusText,\n        waitedSeconds\n      });\n    }\n\n    const backoffMs = 1000 * (2 ** (attempt - 1));\n    await new Promise((resolve) => setTimeout(resolve, backoffMs));\n  } catch (err) {\n    if (attempt >= maxRetries) {\n      return errorOut('Fetch_Dataset_Items', 'APIFY_DATASET_NETWORK_ERROR', null, String(err.message || err), true, {\n        actorId,\n        runId,\n        status: runStatusText,\n        waitedSeconds\n      });\n    }\n    const backoffMs = 1000 * (2 ** (attempt - 1));\n    await new Promise((resolve) => setTimeout(resolve, backoffMs));\n  }\n}\n\nif (itemsCode < 200 || itemsCode >= 300) {\n  const msg = itemsBody?.error?.message || itemsBody?.message || `Dataset items fetch failed (${itemsCode || 'no status'})`;\n  return errorOut('Fetch_Dataset_Items', 'APIFY_DATASET_FETCH_FAILED', itemsCode || null, msg, retriableByStatus(itemsCode), {\n    actorId,\n    runId,\n    status: runStatusText,\n    waitedSeconds\n  });\n}\n\nconst rawItems = Array.isArray(itemsBody)\n  ? itemsBody\n  : Array.isArray(itemsBody?.data)\n    ? itemsBody.data\n    : [];\n\nreturn [{\n  json: {\n    ...job,\n    ok: true,\n    stage: 'Fetch_Dataset_Items',\n    error: null,\n    datasetId,\n    defaultDatasetId: datasetId,\n    apifyRunId: runId,\n    apifyRunStatus: runStatusText || successStatus,\n    apifyActorId: actorId,\n    waitedSeconds,\n    apifyRunUrl: runUrlNoToken,\n    datasetItemsUrl: datasetItemsUrlNoToken,\n    rawItems,\n    fetchedCount: rawItems.length,\n    sampleRawItemTop1: rawItems.length ? rawItems[0] : null,\n    fetchedAtISO: new Date().toISOString()\n  }\n}];"
+        },
+        "id": "8",
+        "name": "Run_Apify_TikTok",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1640,
+          320
+        ],
+        "continueOnFail": true
+      },
+      {
+        "parameters": {
+          "jsCode": "const started = Date.now();\ntry {\n  const payload = $json || {};\n  const job = $('Split_Jobs').item.json || {};\n\n  if (payload.ok === false || payload.error) {\n    const nowIso = new Date().toISOString();\n    return [{\n      json: {\n        ...job,\n        ok: false,\n        stage: payload.stage || 'Run_Apify_TikTok',\n        error: payload.error || null,\n        fetchedCount: Number(payload.fetchedCount || 0),\n        inLookbackCount: 0,\n        appendCountPlanned: 0,\n        rowsMatrix: [],\n        sampleRawItemTop1: payload.sampleRawItemTop1 ?? null,\n        top5MappedRows: { columns: [], rows: [] },\n        apifyActorId: payload.apifyActorId || job.actorNormalized || null,\n        apifyRunId: payload.apifyRunId || null,\n        apifyRunStatus: payload.apifyRunStatus || null,\n        datasetId: payload.datasetId || payload.defaultDatasetId || null,\n        defaultDatasetId: payload.defaultDatasetId || payload.datasetId || null,\n        waitedSeconds: Number(payload.waitedSeconds || job.waitForFinish || 0) || null,\n        startedAtISO: job.jobStartedAtISO || job.startedAtISO || nowIso,\n        finishedAtISO: nowIso,\n        durationMs: Math.max(0, Date.now() - new Date(job.jobStartedAtISO || job.startedAtISO || nowIso).getTime()),\n        errorMessage: payload.error?.message || 'Apify execution failed'\n      }\n    }];\n  }\n\n  const rawItems = Array.isArray(payload.rawItems) ? payload.rawItems : [];\n\n  const toNumOrNull = (v) => {\n    if (v === null || v === undefined || v === '') return null;\n    const n = Number(v);\n    return Number.isFinite(n) ? n : null;\n  };\n\n  const toIso = (v) => {\n    if (v === null || v === undefined || v === '') return null;\n    if (typeof v === 'number') {\n      const ms = v > 1e12 ? v : v > 1e9 ? v * 1000 : null;\n      if (!ms) return null;\n      const d = new Date(ms);\n      return Number.isNaN(d.getTime()) ? null : d.toISOString();\n    }\n    const d = new Date(v);\n    return Number.isNaN(d.getTime()) ? null : d.toISOString();\n  };\n\n  const toKstDate = (iso) => {\n    if (!iso) return null;\n    const d = new Date(iso);\n    if (Number.isNaN(d.getTime())) return null;\n    return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });\n  };\n\n  const nowIso = new Date().toISOString();\n  const todayKst = toKstDate(nowIso);\n  const startDate = new Date(Date.now() - (Math.max(1, Number(job.days || 30)) - 1) * 86400000);\n  const startKst = startDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });\n\n  const mappedRows = rawItems.map((item) => {\n    const createTimeISO = toIso(item.createTimeISO ?? item.createTime ?? item.createdAt ?? null);\n    const createDateKST = toKstDate(createTimeISO);\n    const inLookback = Boolean(createDateKST && createDateKST >= startKst && createDateKST <= todayKst);\n    const author = item.authorMeta || {};\n\n    return {\n      collectedAtISO: nowIso,\n      collectedDateKST: todayKst,\n      createTimeISO,\n      createDateKST,\n      bucket: job.bucket,\n      keyword: job.keyword,\n      query: job.query,\n      proxyCountryCode: job.proxyCountryCode,\n      id: item.id ?? null,\n      text: item.text ?? null,\n      textLanguage: item.textLanguage ?? null,\n      videoUrl: item.webVideoUrl ?? item.videoUrl ?? null,\n      authorName: author.name ?? null,\n      authorNickName: author.nickName ?? null,\n      authorProfileUrl: author.profileUrl ?? null,\n      authorFollowers: toNumOrNull(author.fans),\n      playCount: toNumOrNull(item.playCount),\n      diggCount: toNumOrNull(item.diggCount),\n      shareCount: toNumOrNull(item.shareCount),\n      commentCount: toNumOrNull(item.commentCount),\n      inLookback,\n      runId: job.runId || null\n    };\n  });\n\n  const rowsMatrix = mappedRows.map((r) => ([\n    r.collectedAtISO,\n    r.collectedDateKST,\n    r.createTimeISO,\n    r.createDateKST,\n    r.bucket,\n    r.keyword,\n    r.query,\n    r.proxyCountryCode,\n    r.id,\n    r.text,\n    r.textLanguage,\n    r.videoUrl,\n    r.authorName,\n    r.authorNickName,\n    r.authorProfileUrl,\n    r.authorFollowers,\n    r.playCount,\n    r.diggCount,\n    r.shareCount,\n    r.commentCount,\n    r.inLookback,\n    r.runId\n  ]));\n\n  const previewColumns = [\n    'collectedAtISO','collectedDateKST','createTimeISO','createDateKST','bucket','keyword','query','proxyCountryCode','id','text','textLanguage','videoUrl','authorName','authorNickName','authorProfileUrl','authorFollowers','playCount','diggCount','shareCount','commentCount','inLookback','runId'\n  ];\n\n  const finishedAtISO = new Date().toISOString();\n  const durationMs = Date.now() - (new Date(job.jobStartedAtISO || job.startedAtISO || finishedAtISO).getTime() || Date.now());\n\n  return [{\n    json: {\n      ...job,\n      ok: true,\n      actorUsed: job.actorNormalized,\n      requestedDays: Number(job.days || 30),\n      fetchedCount: mappedRows.length,\n      inLookbackCount: mappedRows.filter((r) => r.inLookback).length,\n      appendCountPlanned: mappedRows.length,\n      rowsMatrix,\n      datasetId: payload.datasetId || payload.defaultDatasetId || null,\n      defaultDatasetId: payload.defaultDatasetId || payload.datasetId || null,\n      apifyRunId: payload.apifyRunId || null,\n      apifyRunStatus: payload.apifyRunStatus || null,\n      apifyActorId: payload.apifyActorId || job.actorNormalized || null,\n      waitedSeconds: Number(payload.waitedSeconds || job.waitForFinish || 0) || null,\n      apifyRunUrl: job.apifyRunUrl,\n      apifyDatasetItemsUrl: payload.datasetItemsUrl || null,\n      sampleRawItemTop1: rawItems.length > 0 ? rawItems[0] : null,\n      top5MappedRows: {\n        columns: previewColumns,\n        rows: mappedRows.slice(0, 5)\n      },\n      startedAtISO: job.jobStartedAtISO || job.startedAtISO || nowIso,\n      finishedAtISO,\n      durationMs,\n      errorMessage: null\n    }\n  }];\n} catch (err) {\n  return [{\n    json: {\n      ok: false,\n      fetchedCount: 0,\n      inLookbackCount: 0,\n      appendCountPlanned: 0,\n      rowsMatrix: [],\n      sampleRawItemTop1: null,\n      top5MappedRows: { columns: [], rows: [] },\n      errorMessage: `MAPPING_ERROR: ${err.message}`,\n      durationMs: Date.now() - started\n    }\n  }];\n}"
+        },
+        "id": "9",
+        "name": "Map_To_RawEvents_Schema",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1880,
+          320
+        ]
+      },
+      {
+        "parameters": {
+          "authentication": "oAuth2",
+          "resource": "sheet",
+          "operation": "update",
+          "sheetId": "={{$env.GSHEET_ID}}",
+          "range": "={{$json.appendRange}}",
+          "rawData": true,
+          "dataProperty": "rowsMatrix",
+          "options": {
+            "valueInputMode": "RAW"
+          }
+        },
+        "id": "10",
+        "name": "Append_Raw_Events",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 2,
+        "position": [
+          2120,
+          320
+        ],
+        "continueOnFail": false,
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "xFQ7ZGfQSpFnp6LD",
+            "name": "Google Sheets account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const current = $json || {};\nlet planned;\ntry {\n  planned = $('Map_To_RawEvents_Schema').item.json || {};\n} catch {\n  planned = current;\n}\n\nconst appendError = current.error?.message ? String(current.error.message) : null;\nconst isDryRun = planned.dryRun === true;\nconst isSkip = planned.skipWorkflow === true;\nconst nowIso = new Date().toISOString();\nconst startTs = new Date(planned.jobStartedAtISO || planned.startedAtISO || nowIso).getTime();\n\nconst sanitizeError = (err) => {\n  if (!err) return null;\n  if (typeof err === 'string') return { message: err };\n  return {\n    code: err.code ?? null,\n    httpStatus: err.httpStatus ?? null,\n    message: err.message ? String(err.message) : String(err),\n    retriable: err.retriable ?? null\n  };\n};\n\nconst errObj = sanitizeError(planned.error);\nconst errorMessage = planned.fatalErrorMessage || planned.errorMessage || appendError || errObj?.message || null;\n\nreturn [{\n  json: {\n    dryRun: isDryRun,\n    runId: planned.runId || null,\n    bucket: planned.bucket || null,\n    keyword: planned.keyword || null,\n    query: planned.query || null,\n    proxyCountryCode: planned.proxyCountryCode || null,\n    actorUsed: planned.actorUsed || planned.actorNormalized || planned.apifyActorId || null,\n    apifyActorId: planned.apifyActorId || planned.actorNormalized || null,\n    apifyRunId: planned.apifyRunId || null,\n    datasetId: planned.datasetId || planned.defaultDatasetId || null,\n    defaultDatasetId: planned.defaultDatasetId || planned.datasetId || null,\n    apifyRunStatus: planned.apifyRunStatus || null,\n    waitedSeconds: Number(planned.waitedSeconds || 0) || null,\n    requestedDays: planned.requestedDays || planned.days || null,\n    jobsCount: planned.jobsCount || null,\n    perJobCap: planned.perJobCap || null,\n    resultsLimit: planned.resultsLimit || null,\n    apifyRunUrl: planned.apifyRunUrl || null,\n    apifyDatasetItemsUrlTemplate: planned.apifyDatasetItemsUrlTemplate || null,\n    apifyDatasetItemsUrl: planned.apifyDatasetItemsUrl || null,\n    sheetsRangesWouldWrite: planned.sheetsRangesWouldWrite || null,\n    fetchedCount: Number(planned.fetchedCount || 0),\n    appendedCount: isDryRun || isSkip || appendError || errorMessage ? 0 : Number(planned.appendCountPlanned || 0),\n    inLookbackCount: Number(planned.inLookbackCount || 0),\n    sampleRawItemTop1: planned.sampleRawItemTop1 ?? null,\n    top5MappedRows: planned.top5MappedRows ?? { columns: [], rows: [] },\n    startedAtISO: planned.jobStartedAtISO || planned.startedAtISO || nowIso,\n    finishedAtISO: planned.finishedAtISO || nowIso,\n    durationMs: Number.isFinite(Number(planned.durationMs)) ? Number(planned.durationMs) : Math.max(0, Date.now() - startTs),\n    stage: planned.stage || null,\n    error: errObj,\n    errorMessage\n  }\n}];"
+        },
+        "id": "11",
+        "name": "Per_Job_Summary",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2360,
+          320
+        ]
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "const BUILD_TAG = 'collector-sp2-2026-02-26-runid-dryrun-restored';\nconst items = $input.all().map((i) => i.json || {});\nconst req = $('Parse_Request').first().json || {};\n\nconst serializeError = (e) => {\n  if (!e) return null;\n  if (typeof e === 'string') return { name: 'Error', message: e };\n  return {\n    name: e.name ? String(e.name) : 'Error',\n    message: e.message ? String(e.message) : String(e),\n    stack: e.stack ? String(e.stack) : undefined\n  };\n};\n\ntry {\n  const startedAtISO = req.startedAtISO || (items[0]?.startedAtISO) || new Date().toISOString();\n  const finishedAtISO = new Date().toISOString();\n  const durationMs = Math.max(0, new Date(finishedAtISO).getTime() - new Date(startedAtISO).getTime());\n  const jobsTotal = items.length;\n  const jobsFailed = items.filter((i) => i.errorMessage).length;\n  const jobsSucceeded = Math.max(0, jobsTotal - jobsFailed);\n  const dryRun = req.dryRun === true;\n  const runId = req.runId || items[0]?.runId || null;\n\n  return [{\n    json: {\n      buildTag: BUILD_TAG,\n      workflow: 'KoreaSignals_Collector_TikTok',\n      ok: jobsFailed === 0,\n      dryRun,\n      runId,\n      startedAt: startedAtISO,\n      finishedAt: finishedAtISO,\n      durationMs,\n      jobsTotal,\n      jobsSucceeded,\n      jobsFailed,\n      totalFetched: items.reduce((s, i) => s + Number(i.fetchedCount || 0), 0),\n      totalAppended: items.reduce((s, i) => s + Number(i.appendedCount || 0), 0),\n      totalInLookback: items.reduce((s, i) => s + Number(i.inLookbackCount || 0), 0),\n      sheetsRanges: {\n        ensureHeader: `${$env.GSHEET_RAW_TAB || 'raw_events'}!A1:V1`,\n        appendRows: `${$env.GSHEET_RAW_TAB || 'raw_events'}!A:V`\n      },\n      perJobSummary: items.map((i) => ({\n        ...i,\n        runId: i.runId || runId || null,\n        apifyRunId: i.apifyRunId || null,\n        datasetId: i.datasetId || i.defaultDatasetId || null,\n        defaultDatasetId: i.defaultDatasetId || i.datasetId || null,\n        fetchedCount: Number(i.fetchedCount || 0)\n      }))\n    }\n  }];\n} catch (e) {\n  const err = serializeError(e);\n  return [{\n    json: {\n      buildTag: BUILD_TAG,\n      workflow: 'KoreaSignals_Collector_TikTok',\n      ok: false,\n      reason: 'FINALIZE_RESPONSE_ERROR',\n      message: err?.message || 'Finalize response failed',\n      error: err,\n      dryRun: req.dryRun === true,\n      runId: req.runId || items[0]?.runId || null,\n      perJobSummary: items.map((i) => ({\n        ...i,\n        runId: i.runId || req.runId || null,\n        apifyRunId: i.apifyRunId || null,\n        datasetId: i.datasetId || i.defaultDatasetId || null,\n        defaultDatasetId: i.defaultDatasetId || i.datasetId || null,\n        fetchedCount: Number(i.fetchedCount || 0)\n      }))\n    }\n  }];\n}"
+        },
+        "id": "12",
+        "name": "Finalize_Response",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2600,
+          220
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "boolean": [
+              {
+                "value1": "={{$json.skipWorkflow !== true}}",
+                "operation": "isTrue"
+              }
+            ]
+          }
+        },
+        "id": "13",
+        "name": "Job_Runnable",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          1620,
+          500
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "boolean": [
+              {
+                "value1": "={{$('Parse_Request').first().json.dryRun !== true}}",
+                "operation": "isTrue"
+              }
+            ]
+          }
+        },
+        "id": "32",
+        "name": "Not_DryRun_Header",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          940,
+          320
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "boolean": [
+              {
+                "value1": "={{$('Parse_Request').first().json.dryRun !== true}}",
+                "operation": "isTrue"
+              }
+            ]
+          }
+        },
+        "id": "33",
+        "name": "Not_DryRun_Append",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          2340,
+          520
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "number": [
+              {
+                "value1": "={{Array.isArray($json.rowsMatrix) ? $json.rowsMatrix.length : 0}}",
+                "operation": "larger",
+                "value2": 0
+              }
+            ],
+            "boolean": [
+              {
+                "value1": "={{!$json.errorMessage}}",
+                "operation": "isTrue"
+              }
+            ]
+          }
+        },
+        "id": "31",
+        "name": "Has_Rows_To_Append",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          2100,
+          520
+        ]
+      },
+      {
+        "parameters": {
+          "authentication": "oAuth2",
+          "resource": "sheet",
+          "operation": "read",
+          "sheetId": "={{$env.GSHEET_ID}}",
+          "range": "={{($env.GSHEET_RAW_TAB || 'raw_events') + '!A:A'}}",
+          "rawData": true,
+          "dataProperty": "existingColumnA"
+        },
+        "id": "34",
+        "name": "Read_RawEvents_For_Append",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 2,
+        "alwaysOutputData": true,
+        "position": [
+          2120,
+          420
+        ],
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "xFQ7ZGfQSpFnp6LD",
+            "name": "Google Sheets account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const planned = $('Map_To_RawEvents_Schema').item.json || {};\nconst existing = Array.isArray($json.existingColumnA) ? $json.existingColumnA : [];\nconst nonEmptyRows = existing.filter((r) => Array.isArray(r) && String(r[0] ?? '').trim() !== '').length;\nconst startRow = Math.max(2, nonEmptyRows + 1);\nconst tab = $env.GSHEET_RAW_TAB || 'raw_events';\n\nreturn [{\n  json: {\n    ...planned,\n    appendRange: `${tab}!A${startRow}:V`,\n    rowsMatrix: Array.isArray(planned.rowsMatrix) ? planned.rowsMatrix : []\n  }\n}];"
+        },
+        "id": "35",
+        "name": "Build_Append_Range",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2340,
+          420
+        ]
+      }
+    ],
+    "connections": {
+      "Trigger_Manual": {
+        "main": [
+          [
+            {
+              "node": "Parse_Request",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Trigger_Webhook": {
+        "main": [
+          [
+            {
+              "node": "Parse_Request",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse_Request": {
+        "main": [
+          [
+            {
+              "node": "Build_Raw_Header",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build_Raw_Header": {
+        "main": [
+          [
+            {
+              "node": "Not_DryRun_Header",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build_Jobs": {
+        "main": [
+          [
+            {
+              "node": "Split_Jobs",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Split_Jobs": {
+        "main": [
+          [
+            {
+              "node": "Finalize_Response",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Job_Runnable",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Run_Apify_TikTok": {
+        "main": [
+          [
+            {
+              "node": "Map_To_RawEvents_Schema",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Map_To_RawEvents_Schema": {
+        "main": [
+          [
+            {
+              "node": "Has_Rows_To_Append",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Append_Raw_Events": {
+        "main": [
+          [
+            {
+              "node": "Per_Job_Summary",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Per_Job_Summary": {
+        "main": [
+          [
+            {
+              "node": "Split_Jobs",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Job_Runnable": {
+        "main": [
+          [
+            {
+              "node": "Run_Apify_TikTok",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Per_Job_Summary",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Ensure_RawEvents_Header": {
+        "main": [
+          [
+            {
+              "node": "Build_Jobs",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Not_DryRun_Header": {
+        "main": [
+          [
+            {
+              "node": "Ensure_RawEvents_Header",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Build_Jobs",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Has_Rows_To_Append": {
+        "main": [
+          [
+            {
+              "node": "Not_DryRun_Append",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Per_Job_Summary",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Not_DryRun_Append": {
+        "main": [
+          [
+            {
+              "node": "Read_RawEvents_For_Append",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Per_Job_Summary",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Read_RawEvents_For_Append": {
+        "main": [
+          [
+            {
+              "node": "Build_Append_Range",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build_Append_Range": {
+        "main": [
+          [
+            {
+              "node": "Append_Raw_Events",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "id": "4QGwto8MFAMH0XCy"
+  }
+]
