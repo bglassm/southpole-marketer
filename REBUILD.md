@@ -1,61 +1,77 @@
-# Rebuild (Fresh Mac)
+# Rebuild Guide
 
-## 1) Prerequisites
+## 1. Prerequisites
 - Install Docker Desktop.
-- Ensure these paths exist:
-  - `/Users/spmac009/Documents/Southpole`
-  - `/Users/spmac009/Documents/Southpole/docker`
+- Clone this private repository.
+- Ensure Docker Desktop is running before starting the stack.
 
-## 2) Restore local secrets
-1. Copy `.env.example` to `docker/.env.instance2`.
-2. Fill required secrets/ids in `docker/.env.instance2`:
-   - `N8N_BASIC_AUTH_USER`
-   - `N8N_BASIC_AUTH_PASSWORD`
-   - `N8N_ENCRYPTION_KEY`
-   - `APIFY_TOKEN`
-   - `GSHEET_ID`
-   - `POSTGRES2_PASSWORD`
-
-## 3) Start services
+## 2. Configure Environment
 ```bash
-cd /Users/spmac009/Documents/Southpole
-/Users/spmac009/Documents/Southpole/scripts/instance2-up.sh
+cp .env.example .env
 ```
 
-## 4) Expected ports/services
-- n8n editor/webhook: `http://localhost:5679`
-- Postgres: internal Docker network (`southpole2-postgres:5432`)
+Fill at least:
+- `APIFY_TOKEN`
+- `N8N_ENCRYPTION_KEY`
+- `OPENAI_API_KEY`
 
-## 5) Restore/verify workflows in DB
-- Collector workflow id: `4QGwto8MFAMH0XCy`
-- Aggregator workflow id: `XWcJTb1oXxF1NZWt`
+Optional:
+- `OPENAI_MODEL`
+- `OPENAI_ANALYSIS_MODEL`
+- `APIFY_TIKTOK_COMMENTS_ACTOR_ID`
 
-Verify ids exist:
+## 3. Start
+macOS:
 ```bash
-docker exec -i southpole2-postgres psql -U n8n2 -d n8n2 -c "select id, name, active from workflow_entity where id in ('4QGwto8MFAMH0XCy','XWcJTb1oXxF1NZWt');"
+./start.command
 ```
 
-## 6) Runtime checks
-Collector (non-dry run):
-```bash
-curl -sS -X POST 'http://localhost:5679/webhook/koreasignals/collect' \
-  -H 'Content-Type: application/json' \
-  -d '{"keywords":["Gen Z travel"],"days":30,"dryRun":false}'
+Windows:
+```bat
+start.bat
 ```
 
-Aggregator (non-dry run):
+Shell fallback:
 ```bash
-curl -sS -X POST 'http://localhost:5679/webhook/koreasignals/aggregate' \
-  -H 'Content-Type: application/json' \
-  -d '{"days":30,"dryRun":false}'
+bash scripts/up.sh
 ```
 
-Expected:
-- Collector response includes `buildTag`, `runId`, and non-error `perJobSummary`.
-- Aggregator response includes `buildTag`, non-null summary counts when raw data exists.
+## 4. Open UI
+Go to:
 
-## 7) Shutdown
-```bash
-cd /Users/spmac009/Documents/Southpole
-/Users/spmac009/Documents/Southpole/scripts/instance2-down.sh
+```text
+http://localhost:8080/ui
 ```
+
+Use:
+1. `Run Collect + Aggregate`
+2. `Generate DM Drafts`
+
+## 5. Verify
+```bash
+bash scripts/check-portability.sh
+bash scripts/verify.sh
+```
+
+`verify.sh` uses mock data and should create a local run under `outputs/runs/`.
+
+## 6. Stop
+macOS:
+```bash
+./stop.command
+```
+
+Windows:
+```bat
+stop.bat
+```
+
+Shell fallback:
+```bash
+bash scripts/down.sh
+```
+
+## Notes For Manus AI
+- Start with `AGENTS.md`, `README.md`, `HANDOFF.md`, and `REPO_CONTEXT.md`.
+- Do not request or expose real `.env` values.
+- Generated local artifacts are intentionally not part of the repository.
