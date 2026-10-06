@@ -1,49 +1,13 @@
-# Rebuild Plan Summary
+# Runtime transition record
 
-## What was kept
+The maintained implementation uses a Python/FastAPI operator GUI and local per-run artifacts. Google Sheets and the legacy multi-instance runtime are not dependencies of that flow.
 
-- n8n as the operator-facing orchestrator.
-- Apify collection source (`clockworks/tiktok-scraper`).
-- keyword/day input model for each run.
+| Configuration | Purpose | Entry points |
+| --- | --- | --- |
+| Current Python service | TikTok collection, normalization/aggregation, local reports, optional AI drafts | `apps/pipeline/`, `/ui`, CLI |
+| Current n8n wrapper | Manual/webhook call to Python `/run` | root Compose, `n8n/workflows/` |
+| Legacy KoreaSignals | n8n/Postgres/Sheets collector and aggregator | `docker/`, `workflows/`, [legacy runbook](runbook.md) |
 
-## What was discarded
+GUI requests go directly to Python; n8n is not the GUI backend. Comments, scoring, outreach sync and drafts are separate explicit operations.
 
-- Google Sheets as a pipeline dependency.
-- legacy multi-instance runtime complexity.
-- shared mutable central output table behavior.
-
-## Clean stack decision
-
-- Single Docker Compose stack.
-- Services:
-  - `n8n` (SQLite storage)
-  - `pipeline` (collector + normalizer + aggregator + report writer)
-- Deterministic local ports:
-  - `5678` for n8n
-  - `8080` for pipeline API
-
-## Operator commands
-
-1. Start:
-
-```bash
-./scripts/up.sh
-./scripts/import-workflows.sh
-```
-
-2. Run collect + aggregate:
-
-- n8n workflow execute, or
-- `./scripts/run-helper.sh "kw1,kw2" 7 "slug"`
-
-3. Verify:
-
-```bash
-./scripts/verify.sh
-```
-
-4. Shutdown clean:
-
-```bash
-./scripts/down.sh
-```
+Use [REBUILD.md](../REBUILD.md) for reproducible setup, [architecture](architecture.md) for current component boundaries, and [roadmap](roadmap.md) for future scope. Historical configurations are retained as reference, not live-service acceptance evidence.

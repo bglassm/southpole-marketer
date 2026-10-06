@@ -1,153 +1,32 @@
-# Southpole Handoff Guide (English)
+# Southpole operator guide
 
-## What Southpole does
+Southpole is a local TikTok keyword research tool with optional AI DM drafts. The canonical [repository is public](https://github.com/bglassm/southpole-marketer); credentials and live research output stay local.
 
-Southpole helps operators run TikTok research locally and prepare creator outreach drafts.
+## Start
 
-From the Operator UI, there are only 2 main actions:
+Install/run Docker Desktop, copy `.env.example` to `.env`, then use `start.command` (macOS), `start.bat` (Windows), or `bash scripts/up.sh`. Open `http://localhost:8080/ui`.
 
-1. `Run Collect + Aggregate`
-2. `Generate DM Drafts`
+- Live collection needs `APIFY_TOKEN` and access to the configured Actor.
+- Optional AI drafts need `OPENAI_API_KEY`.
+- n8n needs `N8N_ENCRYPTION_KEY`.
+- Mock collection needs no API key. See [REBUILD.md](REBUILD.md) for Docker and Python-only commands.
 
-Each run creates a new timestamped output folder under `outputs/runs/`.
+## Keyword-to-creator workflow
 
-## What Southpole does NOT do yet
+1. Enter comma/newline-separated keywords, lookback days and an optional run label.
+2. Select **Run Collect + Aggregate**. Python collects TikTok data through Apify, normalizes it and writes local aggregates.
+3. Inspect **Latest Creators Preview** and the HTML report/creator CSV links. The summary JSON and workbook are available in the run folder.
+4. Optionally select **Generate DM Drafts** with a run, language, limit and brand context.
+5. Review `dm/dm_review.html` or per-creator text files manually. No messages are sent.
 
-- It does **not** send TikTok DMs automatically.
-- It does **not** auto-install Docker Desktop.
+Outputs live under `outputs/runs/<run_id>/`. Missing source metrics are not verified values. DM generation has no key-free fallback, and the review page does not persist approval decisions.
 
-This phase supports draft generation and manual review only.
+## Verification and limits
 
-## Before first use (required)
+[GUI captures and mock evidence](docs/verification.md) use fixed fixtures, not live collection. The GUI has no mock selector; run the documented mock CLI/API request before opening the result preview. `bash scripts/verify.sh` checks file existence only and can pass with zero rows when fixtures age outside its seven-day window.
 
-1. Docker Desktop installed.
-2. `.env` file in project root.
-3. Required values in `.env`:
-   - `APIFY_TOKEN`
-   - `N8N_ENCRYPTION_KEY`
-   - `OPENAI_API_KEY`
+Comments, scoring and outreach state sync are separate API/CLI stages, not automatic stages of `/run`. The current n8n workflow only wraps `/run`; legacy KoreaSignals/Sheets files are separate. See [architecture](docs/architecture.md), [API/CLI](apps/pipeline/README.md), [roadmap](docs/roadmap.md).
 
-Optional values:
+No automatic DM sending, posting/scheduling, OAuth, multi-SNS collection or Clay integration is implemented. The API lacks user authentication and should not be exposed directly to the public internet.
 
-- `OPENAI_MODEL`
-- `TZ`
-
-## Start (non-technical path)
-
-Double-click one file:
-
-- macOS: `start.command`
-- Windows: `start.bat`
-
-What the start launcher does automatically:
-
-1. Checks Docker installation.
-2. If Docker is missing, opens Docker Desktop download page.
-3. If Docker is installed but not running, launches Docker Desktop and waits.
-4. Starts Southpole stack and waits for health.
-5. Opens Operator UI in browser:
-   - `http://localhost:8080/ui`
-
-## How to use the UI
-
-Open: `http://localhost:8080/ui`
-
-### Button 1: Run Collect + Aggregate
-
-Fill:
-
-- `keywords` (comma or newline separated)
-- `days`
-- optional `run label`
-
-Click `Run Collect + Aggregate`.
-
-Result:
-
-- New run folder is created.
-- `report.html`, `creators.csv`, and summary files are generated.
-
-### Button 2: Generate DM Drafts
-
-Fill:
-
-- run folder (latest by default)
-- `language_mode` (`ko`, `en`, `auto`)
-- optional `brand_context`
-- `limit`
-
-Click `Generate DM Drafts`.
-
-Result:
-
-- DM draft files are created in that run folder:
-  - `dm/dm_drafts.csv`
-  - `dm/dm_drafts.json`
-  - `dm/dm_review.html`
-  - `dm/messages/*.txt`
-
-## Where outputs are saved
-
-All outputs are local, per run:
-
-- `outputs/runs/<timestamp>_<slug>/`
-
-Common files:
-
-- `report.html`
-- `summary.json`
-- `keyword_totals.csv`
-- `creators.csv`
-- `daily_metrics.csv`
-- `raw_events.csv`
-- `raw_events.jsonl`
-- `southpole_run_<timestamp>.xlsx`
-- `dm/` (after DM generation)
-
-## Stop
-
-Double-click one file:
-
-- macOS: `stop.command`
-- Windows: `stop.bat`
-
-This stops the Docker stack cleanly.
-
-## Troubleshooting
-
-### Docker is not installed
-
-- Start launcher opens Docker Desktop download page.
-- Install Docker Desktop, then run launcher again.
-
-### Docker is installed but not running
-
-- Launcher attempts to start Docker Desktop automatically.
-- If timeout happens, open Docker Desktop manually and run launcher again.
-
-### UI does not open automatically
-
-1. Open browser manually: `http://localhost:8080/ui`
-2. If still unavailable, run start launcher again.
-3. If needed, ask a technical teammate to check Docker logs:
-   - `docker compose logs --tail=200`
-
-### Stack start fails
-
-Check:
-
-1. Docker Desktop is healthy.
-2. `.env` exists and required keys are filled.
-3. No port conflict on `5678` or `8080`.
-
-## Launcher behavior note
-
-Docker installation is **detect + open download page only**.
-It is **not** automatic installation.
-
-## Internal verification (for technical teammate)
-
-- Portability scan:
-  - `bash scripts/check-portability.sh`
-- Mock verification:
-  - `bash scripts/verify.sh`
+Stop with `stop.command`, `stop.bat`, or `bash scripts/down.sh`. Check Docker health, port conflicts and local logs when troubleshooting; redact credentials before sharing logs. Preserve n8n state before resolving encryption-key mismatches. See [public-history review](docs/public-history-review.md) for unresolved historical identifiers and asset provenance.

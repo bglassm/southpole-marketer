@@ -1,149 +1,45 @@
-# Southpole 인수인계 가이드 (한국어)
+# Southpole 사용 가이드
 
-## Southpole이 하는 일
+Southpole은 TikTok 키워드 수집·집계와 크리에이터 결과 확인을 위한 로컬 도구입니다. [공개 저장소](https://github.com/bglassm/southpole-marketer)의 코드를 사용하며, 실제 데이터와 키는 로컬에 보관합니다.
 
-Southpole은 로컬 환경에서 TikTok 리서치를 실행하고, 크리에이터별 DM 초안을 만드는 도구입니다.
+## 준비와 시작
 
-운영자는 UI에서 아래 두 가지 버튼만 사용하면 됩니다.
+1. Docker Desktop을 설치하고 실행합니다.
+2. 저장소 루트에서 `.env.example`을 `.env`로 복사합니다.
+3. 실제 수집에는 `APIFY_TOKEN`, AI 초안에는 `OPENAI_API_KEY`, n8n에는 `N8N_ENCRYPTION_KEY`를 설정합니다. AI 초안은 선택 기능입니다.
+4. macOS는 `start.command`, Windows는 `start.bat`을 실행합니다. 셸에서는 `bash scripts/up.sh`입니다.
+5. `http://localhost:8080/ui`에 접속합니다.
 
-1. `Run Collect + Aggregate`
-2. `Generate DM Drafts`
+시작 런처는 Docker 설치를 감지하고 필요한 경우 다운로드 페이지를 열지만 자동 설치하지 않습니다. Python 단독 실행은 [REBUILD.md](REBUILD.md)를 참고하세요.
 
-실행할 때마다 `outputs/runs/` 아래에 새로운 실행 폴더가 생성됩니다.
+## 키워드에서 결과까지
 
-## 아직 하지 않는 일
+1. **Keywords**에 쉼표나 줄바꿈으로 키워드를 입력합니다.
+2. **Days**와 선택적인 실행 이름을 지정합니다. 기간은 수집된 게시물을 정규화할 때 필터링합니다.
+3. **Run Collect + Aggregate**를 누릅니다. 수집·정규화·집계 후 새 실행 폴더가 생성됩니다.
+4. **Latest Creators Preview**에서 크리에이터 핸들·이름·집계 수치를 확인합니다. 원본에 없는 팔로워 수치는 확보되었다고 해석하지 않습니다.
+5. 화면 링크에서 `report.html`, `creators.csv`를 엽니다. `summary.json`과 Excel 파일은 `outputs/runs/<run_id>/` 실행 폴더에서 확인합니다.
 
-- TikTok DM 자동 발송은 지원하지 않습니다.
-- Docker Desktop 자동 설치는 지원하지 않습니다.
+[실제 GUI와 모의 검증 기록](docs/verification.md)은 고정 fixture 기반입니다. GUI 자체에는 모의 실행 선택란이 없습니다. 키 없이 확인하려면 [모의 CLI 실행](REBUILD.md#모의-검증)을 먼저 수행하고 GUI를 새로고침하세요.
 
-현재 단계는 “수집/집계 + DM 초안 생성/검토”까지입니다.
+## 선택적 AI DM 초안
 
-## 사용 전 준비 (필수)
+실행 폴더·언어(`ko`/`en`/`auto`)·개수·브랜드 맥락을 선택하고 **Generate DM Drafts**를 누릅니다. `OPENAI_API_KEY`가 없으면 오류가 나며 대체 초안을 자동 생성하지 않습니다.
 
-1. Docker Desktop 설치
-2. 프로젝트 루트에 `.env` 파일 준비
-3. `.env` 필수 값 입력
-   - `APIFY_TOKEN`
-   - `N8N_ENCRYPTION_KEY`
-   - `OPENAI_API_KEY`
+결과는 `dm/dm_drafts.csv`, `dm/dm_drafts.json`, `dm/dm_review.html`, `dm/messages/*.txt`입니다. 검토 화면은 내용을 읽고 복사하는 용도입니다. 승인 상태 저장·자동 DM 발송·게시 기능은 없습니다. AI가 제안한 내용은 사실·표현·수신자 적합성을 사람이 확인해야 합니다.
 
-선택 값:
+## 추가 처리와 범위
 
-- `OPENAI_MODEL`
-- `TZ`
+댓글 수집/분석·크리에이터 점수·아웃리치 레지스트리는 [별도 API/CLI](apps/pipeline/README.md)입니다. 수집 버튼이 모두 자동 실행하지 않습니다. 다중 SNS·OAuth·게시/예약·Clay는 [향후 계획](docs/roadmap.md)이며 현재 기능이 아닙니다.
 
-## 시작 방법 (비개발자용)
+현재 GUI는 Python API를 직접 호출합니다. n8n 현재 래퍼와 옛 Google Sheets 실행 구성은 [아키텍처](docs/architecture.md)에서 구분합니다.
 
-파일을 더블클릭하세요.
+## 종료와 문제 해결
 
-- macOS: `start.command`
-- Windows: `start.bat`
+- 종료: `stop.command`, `stop.bat`, 또는 `bash scripts/down.sh`.
+- 접속 실패: Docker 상태와 8080/5678 포트 충돌, `docker compose logs --tail=100 pipeline` 확인.
+- 수집 실패: 로컬 키·Actor 접근 권한·네트워크 확인. 키나 응답 속 개인정보를 그대로 공유하지 않습니다.
+- 결과 0건: 검색 조건과 기간을 확인합니다. 고정 fixture도 기간 밖이면 0건입니다.
+- n8n 키 불일치: 상태 백업과 기존 키를 먼저 확인합니다. 데이터를 임의로 삭제하지 않습니다.
 
-시작 파일이 자동으로 하는 일:
-
-1. Docker 설치 여부 확인
-2. Docker가 없으면 다운로드 페이지 자동 오픈
-3. Docker는 있지만 실행 중이 아니면 Docker Desktop 실행 시도 + 대기
-4. Southpole 스택 시작 + 헬스 체크 대기
-5. 브라우저에서 Operator UI 자동 오픈
-   - `http://localhost:8080/ui`
-
-## UI 사용 방법
-
-접속 주소: `http://localhost:8080/ui`
-
-### 1) Run Collect + Aggregate
-
-입력:
-
-- `keywords` (쉼표 또는 줄바꿈으로 구분)
-- `days`
-- (선택) `run label`
-
-실행 결과:
-
-- 새로운 run 폴더 생성
-- `report.html`, `creators.csv`, 요약 파일 생성
-
-### 2) Generate DM Drafts
-
-입력:
-
-- run 폴더 (기본: 최신 run)
-- `language_mode` (`ko`, `en`, `auto`)
-- (선택) `brand_context`
-- `limit`
-
-실행 결과:
-
-- 해당 run 폴더 아래 DM 결과 생성
-  - `dm/dm_drafts.csv`
-  - `dm/dm_drafts.json`
-  - `dm/dm_review.html`
-  - `dm/messages/*.txt`
-
-## 결과물 저장 위치
-
-모든 결과는 로컬에 저장됩니다.
-
-- `outputs/runs/<timestamp>_<slug>/`
-
-주요 파일:
-
-- `report.html`
-- `summary.json`
-- `keyword_totals.csv`
-- `creators.csv`
-- `daily_metrics.csv`
-- `raw_events.csv`
-- `raw_events.jsonl`
-- `southpole_run_<timestamp>.xlsx`
-- `dm/` (DM 초안 생성 후)
-
-## 종료 방법
-
-파일을 더블클릭하세요.
-
-- macOS: `stop.command`
-- Windows: `stop.bat`
-
-Docker 스택이 정상 종료됩니다.
-
-## 문제 해결
-
-### Docker가 설치되지 않음
-
-- 시작 파일이 Docker Desktop 다운로드 페이지를 열어줍니다.
-- 설치 후 시작 파일을 다시 실행하세요.
-
-### Docker가 설치되어 있지만 실행 중이 아님
-
-- 시작 파일이 Docker Desktop 실행을 시도합니다.
-- 일정 시간 안에 준비되지 않으면 Docker Desktop을 직접 실행한 뒤 다시 시도하세요.
-
-### UI가 자동으로 열리지 않음
-
-1. 브라우저에서 직접 접속: `http://localhost:8080/ui`
-2. 그래도 안 되면 시작 파일 재실행
-3. 필요 시 기술 담당자가 로그 확인
-   - `docker compose logs --tail=200`
-
-### 스택 시작 실패
-
-다음을 확인하세요.
-
-1. Docker Desktop 정상 실행 상태
-2. `.env` 존재 여부 및 필수 키 입력 여부
-3. `5678`, `8080` 포트 충돌 여부
-
-## 런처 동작 참고
-
-Docker 설치는 **자동 설치가 아니라**
-“설치 여부 감지 + 다운로드 페이지 열기” 방식입니다.
-
-## 기술 담당자 확인용 (선택)
-
-- 경로 이식성 검사:
-  - `bash scripts/check-portability.sh`
-- 목 실행 검증:
-  - `bash scripts/verify.sh`
+API 인증이 없는 로컬 도구이므로 공용 인터넷 서버로 직접 노출하지 않습니다. [공개 이력 점검](docs/public-history-review.md)은 데이터·권리 관련 별도 확인 사항입니다.

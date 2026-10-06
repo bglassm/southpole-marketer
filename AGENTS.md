@@ -1,36 +1,31 @@
 # AGENTS.md
 
 ## Scope
-- Repository root: Southpole local-first TikTok research and DM draft workflow.
-- Primary runtime: Docker Compose with n8n plus the `apps/pipeline` Python service.
-- Operator UI: `http://localhost:8080/ui` after startup.
+- Canonical public repository: `https://github.com/bglassm/southpole-marketer`.
+- Maintain the local-first TikTok pipeline in `apps/pipeline/`.
+- Operator GUI: `http://localhost:8080/ui`; Python/FastAPI implements collection, aggregation and optional AI DM drafts.
+- Root Compose runs the pipeline plus an optional n8n caller. Legacy `docker/` and `workflows/` are historical KoreaSignals/Sheets configurations, not the current GUI backend.
 
-## Working Rules For AI Agents
-- Do not commit real secrets, tokens, local databases, logs, or generated run outputs.
-- Treat `.env` as local-only. Use `.env.example` for required configuration names.
-- Treat `outputs/runs/`, `outputs/operator_state/`, `state/n8n/`, and `data/` as local/generated data unless a `.gitkeep` is present.
-- Preserve the current local-first workflow: collect, normalize, aggregate, score, then generate DM drafts for human review.
-- Do not add automatic TikTok DM sending. This repo only prepares drafts/review artifacts.
-- Keep changes portable across machines; avoid hard-coded absolute local paths.
+## Working rules
+- Never commit real secrets, tokens, databases, logs, private identifiers or live run data. `.env` is local-only; use `.env.example` for configuration names.
+- `outputs/runs/`, `outputs/operator_state/`, `state/n8n/`, `data/` are generated/local except `.gitkeep`.
+- Small explicitly requested mock evidence may be reviewed and placed under `docs/evidence/`; label fixtures and test instrumentation. Never promote it to evidence of live collection or AI success.
+- Preserve collect → normalize → aggregate. Comments, scoring, outreach sync and DM generation are separate explicit steps; do not describe them as automatically run by `/run`.
+- No automatic TikTok DM sending. DM output is for human review. Posting, multi-SNS collection, OAuth and Clay are future scope, not implemented features.
+- Keep instructions portable and use relative paths. Do not copy real Sheets IDs or company email addresses into examples.
+- Public visibility does not establish asset rights or a software license. Preserve unresolved provenance notes.
+- Do not rewrite history, force push, change visibility, or create replacement repositories without explicit authorization.
+- Keep current implementation and future requirements separate. Missing reference materials remain unverified; do not infer their contents. Government-support business documents are separate context, not product achievements.
 
-## Important Entry Points
-- Human handoff: `HANDOFF.md` and `HANDOFF.ko.md`
-- Main README: `README.md`
-- Pipeline service docs: `apps/pipeline/README.md`
-- Output schema docs: `docs/output-files.md`
-- Docker stack: `docker-compose.yml`
-- n8n workflow export: `n8n/workflows/southpole_run_pipeline.json`
-- Python package: `apps/pipeline/src/southpole_pipeline/`
-- Legacy previous-snapshot files may exist under `docker/` and `workflows/`; prefer `docker-compose.yml` and `n8n/workflows/southpole_run_pipeline.json` for the current stack.
+## Entry points
+- `README.md`, `HANDOFF.ko.md`, `HANDOFF.md`, `REBUILD.md`, `REPO_CONTEXT.md`
+- `docs/architecture.md`, `docs/roadmap.md`, `docs/verification.md`
+- `apps/pipeline/README.md`, `docs/output-files.md`
+- `docker-compose.yml`, `n8n/workflows/southpole_run_pipeline.json`
+- Legacy only: `docs/runbook.md`, `docs/looker_studio_setup.md`, `docker/`, `workflows/`
 
-## Useful Commands
-- Start stack: `bash scripts/up.sh`
-- Stop stack: `bash scripts/down.sh`
-- Import n8n workflows: `bash scripts/import-workflows.sh`
-- Portability scan: `bash scripts/check-portability.sh`
-- Mock verification: `bash scripts/verify.sh`
-
-## Verification Expectations
-- `scripts/check-portability.sh` should report no suspicious absolute paths.
-- `scripts/verify.sh` should produce a mock run and confirm required output files.
-- Generated artifacts should remain ignored unless explicitly requested.
+## Verification
+- `bash scripts/check-portability.sh`: inspect findings rather than allowlisting personal paths.
+- `bash scripts/verify.sh`: Docker mock file-existence check; old fixture dates can yield zero rows. Verify row counts separately as described in `docs/verification.md`.
+- Run real external collection/AI calls only with explicit authorization and local credentials; never print credentials.
+- Documentation-only changes need link/diff checks and evidence consistency, not new product functionality.

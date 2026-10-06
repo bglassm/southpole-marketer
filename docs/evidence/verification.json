@@ -1,0 +1,108 @@
+{
+  "codeBaseline": "7888769ae7ffea4c17575cd342eb56641276133a",
+  "executedAt": "2026-10-06T23:34:16.637Z",
+  "python": "Python 3.12.14",
+  "browser": "153.0.8010.12",
+  "mode": "fixed-repository-fixture",
+  "liveApifyVerified": false,
+  "liveOpenAIVerified": false,
+  "cliRuns": [
+    {
+      "command": "PYTHONPATH=apps/pipeline/src OUTPUT_ROOT=outputs/runs python -m southpole_pipeline.cli run --keywords kbeauty,oliveyoung --days 7 --slug docs-mock-7 --mock-file apps/pipeline/fixtures/mock_apify_items.json",
+      "startedAt": "2026-10-07T02:12:36.044935+09:00",
+      "counts": {
+        "rawEvents": 0,
+        "keywordRows": 0,
+        "creatorRows": 0,
+        "dailyMetricRows": 0,
+        "contentItemRows": 0,
+        "creatorProfileRows": 0
+      },
+      "provider": "mock"
+    },
+    {
+      "command": "PYTHONPATH=apps/pipeline/src OUTPUT_ROOT=outputs/runs python -m southpole_pipeline.cli run --keywords kbeauty,oliveyoung --days 365 --slug docs-mock-365 --mock-file apps/pipeline/fixtures/mock_apify_items.json",
+      "startedAt": "2026-10-07T02:12:36.181489+09:00",
+      "counts": {
+        "rawEvents": 4,
+        "keywordRows": 2,
+        "creatorRows": 3,
+        "dailyMetricRows": 3,
+        "contentItemRows": 4,
+        "creatorProfileRows": 3
+      },
+      "provider": "mock"
+    }
+  ],
+  "browserVerification": {
+    "executedAt": "2026-10-06T23:34:16.637Z",
+    "browser": "153.0.8010.12",
+    "originalRequest": {
+      "keywords": "kbeauty,oliveyoung",
+      "days": 365,
+      "source": "gui-mock-verification",
+      "slug": "mock-gui-check"
+    },
+    "testInstrumentation": {
+      "method": "Playwright request interception adds mock_file to actual POST /run; response comes from unchanged Python API",
+      "mock_file": "apps/pipeline/fixtures/mock_apify_items.json",
+      "guiMockSelector": false
+    },
+    "result": {
+      "rawEvents": 4,
+      "keywordRows": 2,
+      "creatorRows": 3,
+      "dailyMetricRows": 3,
+      "contentItemRows": 4,
+      "creatorProfileRows": 3
+    },
+    "checks": {
+      "emptyKeywordGuard": true,
+      "actualApiMockResponse": true,
+      "creatorTableRows": 3,
+      "reportHttpStatus": 200,
+      "missingOpenAIKeyHttpStatus": 400,
+      "invalidKeywordHttpStatus": 400
+    },
+    "externalBrowserRequests": [],
+    "pageErrors": []
+  },
+  "dockerVerify": {
+    "command": "bash scripts/verify.sh",
+    "exitCode": 1,
+    "status": "not-completed",
+    "reason": "Docker daemon unavailable; no Docker mock success claimed"
+  },
+  "sourceSha256": {
+    "apps/pipeline/fixtures/mock_apify_items.json": "2864a45499c4139b9c99d0b9741d5885e9cb0ec5026c5d0889164aa21519e2ec",
+    "apps/pipeline/requirements.txt": "cc78004371ef1b34b75e6377c90f78045deb2b53ab510c385e6381537dabe538",
+    "apps/pipeline/src/southpole_pipeline/__init__.py": "3df4bdfbdd5ae713dd7994f47ead8f331c40ed9e554ad7ffb3ec3c1e92545b88",
+    "apps/pipeline/src/southpole_pipeline/__main__.py": "3d2438ae92f4746e9ffaa1f837b1fe803f6281091d1f31f8c95643716f257d9a",
+    "apps/pipeline/src/southpole_pipeline/aggregate.py": "afa46be3e6807a8bca3e49a99ca4f5fd2b6b3755840c068d4b0ccc801c38c448",
+    "apps/pipeline/src/southpole_pipeline/api.py": "9f38b65f657441e4c5c578e4af8753e3e70d79e4c2b2c6551932453a623c2ddd",
+    "apps/pipeline/src/southpole_pipeline/cli.py": "0c0c880678ae7103c799935f055d4b2af2ddae0c67697d9053c8036bbe22c6ab",
+    "apps/pipeline/src/southpole_pipeline/collector.py": "fc122bd587af707ca5d19bc89bcee69cd1c25364861625401a9b2929b3f78585",
+    "apps/pipeline/src/southpole_pipeline/comment_analysis.py": "3a93fc8c0d71155c61f3b505bd36b997043b9406f2c8c2627fa8389fbf40c848",
+    "apps/pipeline/src/southpole_pipeline/config.py": "0c0d197979f475b0f5276d921b6897113a1328e3dfa2642d63f950c3a6619d7f",
+    "apps/pipeline/src/southpole_pipeline/dm_generator.py": "77da1de461aa6b6963ba9ddbdbfad5432f9e86a44a2af3e04453b7139c9b072e",
+    "apps/pipeline/src/southpole_pipeline/models.py": "10c65460090b45d1022523d930d180e6bbc4ca8232bf6ee7513c0c7da5167ba6",
+    "apps/pipeline/src/southpole_pipeline/normalize.py": "ae3fff3cfd3cd1d383ba252b0ab0adddb29103b1546fcb6e89485367defefe7a",
+    "apps/pipeline/src/southpole_pipeline/operator_ui.py": "aca482e241c9c65c78ad5e96deb02a4dcc6859d97ca50001afb77d74aebbedec",
+    "apps/pipeline/src/southpole_pipeline/outreach_state.py": "6c072a6be2bf6d14bd49382de2569aebf31b3b426fe6de010d81f1e012252153",
+    "apps/pipeline/src/southpole_pipeline/runner.py": "bcd33559f97087799859c33b51d479d410c99bb304aa577c45f1356fd4aae8bc",
+    "apps/pipeline/src/southpole_pipeline/scoring.py": "103b3b6f4a46cb8685ee5e76f0682108df304b95157ed7a95c9360350018dd5c",
+    "apps/pipeline/src/southpole_pipeline/utils.py": "2a8cf71bb3a26e4eb819b9dabbdb7be35957c6dd067f19fc8d22e2b4665c7b6d",
+    "apps/pipeline/src/southpole_pipeline/writers.py": "df3a25911b1899c24e91d3d4ee0c5c6df80ece3870fa775b573ce6d8bc1641c1",
+    "docker-compose.yml": "8d89e0abd7075dc840abc08e2f37cbff852ff7ef1db33ad7770012c1cafa1fe7",
+    "n8n/workflows/southpole_run_pipeline.json": "293882ff6c16b9ee900ad9c0433b589b68d80be106a2b198e3868d97778d152f",
+    "scripts/verify.sh": "12eef3a478860c8ab75dc8bf3f75263acef9bcf80ca92ca26003eacb3f35859c"
+  },
+  "notVerified": [
+    "live collection",
+    "successful AI DM generation",
+    "n8n execution",
+    "legacy Sheets/Looker services",
+    "comment/scoring/outreach API execution",
+    "all UI interactions"
+  ]
+}

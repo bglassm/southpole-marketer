@@ -1,0 +1,45 @@
+{
+  "runId": "2026-10-07_083416_mock-gui-check",
+  "buildTag": "local-dev",
+  "status": "completed",
+  "startedAt": "2026-10-07T08:34:16.446227+09:00",
+  "finishedAt": "2026-10-07T08:34:16.462088+09:00",
+  "parameters": {
+    "keywords": [
+      "kbeauty",
+      "oliveyoung"
+    ],
+    "days": 365,
+    "timezone": "Asia/Seoul",
+    "source": "gui-mock-verification"
+  },
+  "counts": {
+    "rawEvents": 4,
+    "keywordRows": 2,
+    "creatorRows": 3,
+    "dailyMetricRows": 3,
+    "contentItemRows": 4,
+    "creatorProfileRows": 3
+  },
+  "source": {
+    "provider": "mock",
+    "mockFile": "apps/pipeline/fixtures/mock_apify_items.json"
+  },
+  "files": {
+    "runDir": "outputs/runs/2026-10-07_083416_mock-gui-check",
+    "rawEventsJsonl": "outputs/runs/2026-10-07_083416_mock-gui-check/raw_events.jsonl",
+    "rawEventsCsv": "outputs/runs/2026-10-07_083416_mock-gui-check/raw_events.csv",
+    "keywordTotalsCsv": "outputs/runs/2026-10-07_083416_mock-gui-check/keyword_totals.csv",
+    "creatorsCsv": "outputs/runs/2026-10-07_083416_mock-gui-check/creators.csv",
+    "dailyMetricsCsv": "outputs/runs/2026-10-07_083416_mock-gui-check/daily_metrics.csv",
+    "reportHtml": "outputs/runs/2026-10-07_083416_mock-gui-check/report.html",
+    "workbook": "outputs/runs/2026-10-07_083416_mock-gui-check/southpole_run_2026-10-07_083416.xlsx",
+    "sourceItemsJsonl": "outputs/runs/2026-10-07_083416_mock-gui-check/raw/source_items.jsonl",
+    "contentItemsCsv": "outputs/runs/2026-10-07_083416_mock-gui-check/normalized/content_items.csv",
+    "creatorProfilesCsv": "outputs/runs/2026-10-07_083416_mock-gui-check/normalized/creator_profiles.csv"
+  },
+  "futureDmInput": {
+    "creatorsCsv": "outputs/runs/2026-10-07_083416_mock-gui-check/creators.csv",
+    "summaryJson": "outputs/runs/2026-10-07_083416_mock-gui-check/summary.json"
+  }
+}

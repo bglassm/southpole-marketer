@@ -1,39 +1,26 @@
-# Southpole Repo Context
+# Southpole repository context
 
-Southpole is a local-first TikTok research workflow for operators. It collects TikTok research data through Apify, normalizes and aggregates it, produces local reports/workbooks, scores creators, and generates DM drafts for human review.
+Canonical repository: [bglassm/southpole-marketer](https://github.com/bglassm/southpole-marketer), public. This repository is distinct from SocialHub and `flux-marketing-research-tool`; their features and results are not implementation evidence here.
 
-## Architecture
-- `docker-compose.yml` runs n8n and the pipeline service.
-- `apps/pipeline` contains the Python service, CLI, operator UI, scoring, comment analysis, file writers, and DM draft generation.
-- `n8n/workflows/southpole_run_pipeline.json` contains the n8n workflow export.
-- `outputs/runs/<timestamp>_<slug>/` contains generated run artifacts.
-- `outputs/operator_state/` contains generated outreach registry/history state.
-- `state/n8n/` contains local n8n runtime state and must not be committed.
+## Current implementation
 
-## Runtime Flow
-1. Operator starts the stack with `start.command`, `start.bat`, or `scripts/up.sh`.
-2. Operator opens `http://localhost:8080/ui`.
-3. `Run Collect + Aggregate` collects data, normalizes rows, writes report/workbook outputs, and prepares scoring artifacts.
-4. `Generate DM Drafts` reads a run's `creators.csv` and creates reviewable draft messages.
+- `apps/pipeline/`: Python/FastAPI API, embedded operator GUI, CLI, collector, normalization/aggregation, HTML/CSV/XLSX writers.
+- `GET /ui`: keyword/day input, `Run Collect + Aggregate`, optional `Generate DM Drafts`, run selection and creator preview.
+- `POST /run`: TikTok Apify collection, or `mock_file` through API/CLI, followed by local processing. Does not run all later stages.
+- `POST /dm/generate`: explicit OpenAI draft generation from a run's `creators.csv`; no sending and no local fallback if credentials are missing.
+- Comment target/collection/analysis, deterministic creator scoring and outreach registry sync are separate API/CLI operations.
+- `outputs/runs/`: per-run artifacts. `outputs/operator_state/`: CSV/JSONL outreach state. Both are local/ignored.
 
-## Key APIs
-- `GET /health`
-- `GET /ui`
-- `GET /runs`
-- `POST /run`
-- `POST /dm/generate`
-- `POST /comments/targets`
-- `POST /comments/collect`
-- `POST /comments/analyze`
-- `POST /scoring/creators`
-- `POST /outreach/sync`
+## Runtime boundaries
 
-## Required Local Configuration
-- Copy `.env.example` to `.env`.
-- Fill `APIFY_TOKEN`, `N8N_ENCRYPTION_KEY`, and `OPENAI_API_KEY` for live operation.
-- Optional/comment-specific: `APIFY_TIKTOK_COMMENTS_ACTOR_ID`, `OPENAI_ANALYSIS_MODEL`.
+`docker-compose.yml` starts Python and n8n. The GUI calls Python directly; it does not require an imported n8n workflow. `n8n/workflows/southpole_run_pipeline.json` wraps `/run` via manual/webhook triggers. It does not orchestrate DM or all enrichment stages.
 
-## Privacy And Safety Notes
-- The repo is intended to be private.
-- Real `.env`, run outputs, outreach state, and n8n databases are intentionally ignored.
-- TikTok DM sending is not automated; generated messages are drafts for human review.
+`docker/docker-compose.instance2.yml` and `workflows/` preserve the older n8n/Postgres/Google Sheets architecture. They are not prerequisites for the current local-file pipeline. See [current architecture](docs/architecture.md) and [legacy runbook](docs/runbook.md).
+
+## Configuration and evidence
+
+Use `.env.example` locally. `APIFY_TOKEN` is for live collection, `OPENAI_API_KEY` for optional AI drafts, `N8N_ENCRYPTION_KEY` for n8n. Mock collection requires no API keys. Comment collection also needs an appropriate comment Actor configuration.
+
+[Verification](docs/verification.md) distinguishes mock runs from unverified live calls. [Public-history review](docs/public-history-review.md) records remaining identifiers and rights questions in older commits. [Roadmap](docs/roadmap.md) covers future scope separately.
+
+Automatic messaging, publishing, multi-SNS collection, OAuth and Clay are not implemented. Campaign IDs in CSV state are not a campaign-management product. Government-support plans are not evidence of this product's delivery or performance.

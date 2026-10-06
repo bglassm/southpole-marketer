@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd "/Users/spmac009/Documents/Southpole/docker"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT/docker"
 docker compose -f docker-compose.instance2.yml down

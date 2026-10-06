@@ -1,64 +1,23 @@
-# Looker Studio Setup (KoreaSignals)
+# Legacy Looker Studio reference
 
-## Data source
-1. Open Looker Studio -> Create -> Data Source.
-2. Choose Google Sheets connector.
-3. Select spreadsheet:
-   - `1ToBX-uQQDxSYEf_r0zSpbWAqcr4yt6PDoJ7bkkUOvjg`
-4. Add these tabs as separate data sources:
-   - `daily_metrics`
-   - `keyword_totals`
-   - `top_snippets`
+This document describes the historical KoreaSignals Google Sheets reporting layout. It is not an implemented dashboard or required dependency of the current Southpole Python pipeline. Current outputs are local CSV/JSON/HTML/XLSX files; there is no automatic Looker synchronization.
 
-## Field types
-Set field types explicitly:
+## Data sources
 
-`daily_metrics`
-- `date_kst`: Date (format `YYYY-MM-DD`)
-- `bucket`: Text
-- `keyword`: Text
-- `videos_count`: Number
-- `play_sum`, `digg_sum`, `share_sum`, `comment_sum`: Number
-- `play_avg`, `digg_avg`, `share_avg`, `comment_avg`: Number
+For a separately configured legacy deployment, choose a spreadsheet you own (`<YOUR_SPREADSHEET_ID>`) in Looker Studio's Google Sheets connector. Do not reuse a spreadsheet identifier from old repository history.
 
-`keyword_totals`
-- `bucket`, `keyword`: Text
-- `videos_count`: Number
-- `play_sum`, `digg_sum`, `share_sum`, `comment_sum`: Number
-- `play_per_video`, `digg_per_video`, `share_per_video`, `comment_per_video`: Number
+Add `daily_metrics`, `keyword_totals` and `top_snippets` as separate sources only if the legacy workflows produce those tabs. The current pipeline's similarly named CSV files are not a guarantee of the same schema; compare [output schemas](output-files.md) before any manual import.
 
-`top_snippets`
-- `bucket`, `keyword`, `id`: Text
-- `createDateKST`: Date
-- `createTimeISO`: Date & Time
-- `playCount`, `diggCount`, `shareCount`, `commentCount`, `authorFollowers`: Number
-- `text`, `videoUrl`, `authorNickName`: Text
+## Historical field layout
 
-## Recommended report pages
-1. Overview
-- Scorecards: total videos, total plays, total likes, total comments
-- Time series: `date_kst` vs `play_sum`
-- Filters: `bucket`, `keyword`, `date_kst`
+| Source | Dimensions | Metrics |
+| --- | --- | --- |
+| `daily_metrics` | `date_kst` (Date), `bucket`, `keyword` | `videos_count`, `play_sum`, `digg_sum`, `share_sum`, `comment_sum`, averages |
+| `keyword_totals` | `bucket`, `keyword` | `videos_count`, sums and per-video metrics |
+| `top_snippets` | `id`, `bucket`, `keyword`, dates, text and post/profile references | play/like/comment/share/follower counts where available |
 
-2. Keyword Performance
-- Table from `keyword_totals`
-- Metrics: `videos_count`, `play_sum`, `play_per_video`, `digg_per_video`, `comment_per_video`
-- Sort by `play_sum` desc
+Potential report pages are an overview, keyword table and top-snippet table. Missing metrics should remain missing for quality review; display-only `IFNULL` expressions do not make missing measurements observed data.
 
-3. Top Snippets
-- Table from `top_snippets`
-- Dimensions: `bucket`, `keyword`, `authorNickName`, `text`, `videoUrl`
-- Metrics: `playCount`, `diggCount`, `commentCount`, `shareCount`
-- Sort by `playCount` desc
+## Validation and access
 
-## Null/blank metric handling
-The workflows preserve missing metrics as null/blank. In Looker Studio:
-- Keep nulls as null for quality checks.
-- If needed for charts, add calculated fields like:
-  - `play_sum_filled = IFNULL(play_sum, 0)`
-
-## Refresh and validation
-1. Run collector webhook, then aggregator webhook.
-2. Refresh data sources in Looker Studio.
-3. Validate row counts match sheet tabs.
-4. Spot-check top snippets against `top_snippets` tab values.
+Confirm data ownership, spreadsheet sharing and report sharing separately. Compare row counts and sample records before sharing a report. These steps are a configuration reference, not evidence that this repository operates a live Looker service. See the [legacy runbook](runbook.md) and [public-history review](public-history-review.md).
